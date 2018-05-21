@@ -66,10 +66,10 @@ public class Channel<T>
 
     /**
      * Puts the specified value into the channel. This call blocks until the number of requests ahead of it in the put
-     * queue reduces to less than the channel's buffer size.
+     * queue reduces to less than the channel's buffer size, or the value is used to satisfy a get request.
      * 
      * @throws ChannelClosedException
-     *             if the channel is closed.
+     *             if the channel is closed at the time the request is made.
      */
     public void put(T value) throws ChannelClosedException
     {
@@ -89,8 +89,8 @@ public class Channel<T>
     }
 
     /**
-     * Gets a value from the queue, without blocking. If the channel is closed, or no value is available to satisfy the
-     * request, an result is returned that contains no value.
+     * Gets and removes a value from the channel, without blocking. If the channel is closed, or contains no values, a
+     * result is returned that contains no value.
      */
     public GetResult<T> getNonBlocking()
     {
@@ -101,9 +101,9 @@ public class Channel<T>
     }
 
     /**
-     * Gets a value from the queue. If no value is available in the channel to satisfy the request, this call blocks
-     * until a value becomes available. If the channel is closed (either at the time the request is made, or before a
-     * value becomes available), an empty request is returned that contains no value.
+     * Gets and removes a value from the channel. If the channel contains no values, this call blocks until a value
+     * becomes available. If the channel is closed (either at the time the request is made, or before a value becomes
+     * available), a request is returned that contains no value.
      */
     public GetResult<T> get()
     {
