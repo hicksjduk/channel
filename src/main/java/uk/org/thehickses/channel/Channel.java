@@ -202,7 +202,7 @@ public class Channel<T>
             responder.complete(new PutResponse());
         }
 
-        private PutResponse response()
+        public PutResponse response()
         {
             while (true)
             {
