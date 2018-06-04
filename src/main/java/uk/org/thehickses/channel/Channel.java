@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * A class that emulates the action of a channel in the Go language.
@@ -74,6 +75,19 @@ public class Channel<T>
     public void put(T value) throws ChannelClosedException
     {
         doPut(value).response();
+    }
+
+    /**
+     * Processes values from the channel until it is closed.
+     * 
+     * @param processor
+     *            the processor that is invoked to process each value.
+     */
+    public void range(Consumer<T> processor)
+    {
+        GetResult<T> result;
+        while ((result = get()).containsValue)
+            processor.accept(result.value);
     }
 
     private synchronized PutRequest<T> doPut(T value) throws ChannelClosedException
