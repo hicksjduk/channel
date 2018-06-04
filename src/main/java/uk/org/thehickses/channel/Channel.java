@@ -1,6 +1,7 @@
 package uk.org.thehickses.channel;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
@@ -23,6 +24,7 @@ public class Channel<T>
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
     private final LinkedList<PutRequest<T>> putQueue = new LinkedList<>();
+    private final List<ChannelListener> listeners = new ArrayList<>();
 
     /**
      * Creates a channel with the default buffer size of 0.
@@ -109,6 +111,7 @@ public class Channel<T>
             request.setCompleted();
         putQueue.offer(request);
         processQueues();
+        notifyListeners();
         return request;
     }
 
@@ -155,6 +158,32 @@ public class Channel<T>
         getRequest.setReturnedValue(putRequest.value);
     }
 
+    void addListener(ChannelListener listener)
+    {
+        synchronized (listeners)
+        {
+            listeners.add(listener);
+        }
+    }
+    
+    void removeListener(ChannelListener listener)
+    {
+        synchronized (listeners)
+        {
+            listeners.remove(listener);
+        }
+    }
+    
+    private void notifyListeners()
+    {
+        List<ChannelListener> lCopy = new LinkedList<>();
+        synchronized (listeners)
+        {
+            lCopy.addAll(listeners);
+        }
+        lCopy.stream().forEach(ChannelListener::channelChanged);
+    }
+    
     private static interface Request
     {
         void setChannelClosed();
