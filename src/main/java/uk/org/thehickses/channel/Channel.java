@@ -48,21 +48,14 @@ public class Channel<T>
         List<Request> requests = new LinkedList<>();
         synchronized (this)
         {
-            closed.set(true);
+            if (!closed.compareAndSet(false, true))
+                return;
             requests.addAll(getQueue);
             requests.addAll(putQueue);
             getQueue.clear();
             putQueue.clear();
         }
         requests.stream().forEach(r -> r.setChannelClosed());
-    }
-
-    /**
-     * Gets whether the channel is open.
-     */
-    public boolean isOpen()
-    {
-        return !closed.get();
     }
 
     /**
@@ -75,6 +68,23 @@ public class Channel<T>
     public void put(T value) throws ChannelClosedException
     {
         doPut(value).response();
+    }
+
+    /**
+     * Puts the specified value into the channel, but only if the channel is open. This call blocks under the same
+     * conditions as the get() method, but does not throw an exception if the channel is closed.
+     * 
+     * @return whether the channel was open, and therefore whether the value was actually put.
+     */
+    public boolean putIfOpen(T value)
+    {
+        synchronized (this)
+        {
+            if (!closed.get())
+                return false;
+            put(value);
+            return true;
+        }
     }
 
     /**
@@ -106,7 +116,7 @@ public class Channel<T>
      * Gets and removes a value from the channel, without blocking. If the channel is closed, or contains no values, a
      * result is returned that contains no value.
      */
-    public GetResult<T> getNonBlocking()
+    GetResult<T> getNonBlocking()
     {
         synchronized (this)
         {
