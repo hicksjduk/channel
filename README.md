@@ -13,7 +13,7 @@ as they are thread-safe.
 In this implementation, a routine writes a data item to the channel by calling its put() method.
 The channel has a maximum buffer size (which defaults to 0); any put() request which would
 exceed the buffer size blocks until there is enough space in the buffer. (In the case of
-a buffer size of 0, this means that a put() will block until a matching get() request is received.
+a buffer size of 0, this means that a put() will block until a matching get() request is received.)
 
 A routine reads from the channel by calling its get() method. This removes and returns the first
 item in the channel; if the channel is empty, the call blocks until there is something there.
