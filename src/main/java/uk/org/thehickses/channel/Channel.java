@@ -127,7 +127,7 @@ public class Channel<T>
     /**
      * Gets and removes a value from the channel. If the channel contains no values, this call blocks until a value
      * becomes available. If the channel is closed (either at the time the request is made, or before a value becomes
-     * available), a request is returned that contains no value.
+     * available), a result is returned that contains no value.
      */
     public GetResult<T> get()
     {
