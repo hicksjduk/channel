@@ -72,7 +72,7 @@ public class Channel<T>
 
     /**
      * Puts the specified value into the channel, but only if the channel is open. This call blocks under the same
-     * conditions as the get() method, but does not throw an exception if the channel is closed.
+     * conditions as the put() method, but does not throw an exception if the channel is closed.
      * 
      * @return whether the channel was open, and therefore whether the value was actually put.
      */
