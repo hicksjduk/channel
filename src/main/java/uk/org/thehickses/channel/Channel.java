@@ -80,7 +80,7 @@ public class Channel<T>
     {
         synchronized (this)
         {
-            if (!closed.get())
+            if (closed.get())
                 return false;
             put(value);
             return true;
