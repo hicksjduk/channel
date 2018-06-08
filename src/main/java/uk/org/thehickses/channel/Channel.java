@@ -1,7 +1,6 @@
 package uk.org.thehickses.channel;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
@@ -24,7 +23,6 @@ public class Channel<T>
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
     private final LinkedList<PutRequest<T>> putQueue = new LinkedList<>();
-    private final List<ChannelListener> listeners = new ArrayList<>();
 
     /**
      * Creates a channel with the default buffer size of 0.
@@ -69,7 +67,7 @@ public class Channel<T>
      */
     public void put(T value) throws ChannelClosedException
     {
-        doPut(value).response();
+        putRequest(value).response();
     }
 
     /**
@@ -88,6 +86,11 @@ public class Channel<T>
             return true;
         }
     }
+    
+    public boolean isOpen()
+    {
+        return !closed.get();
+    }
 
     /**
      * Processes values from the channel until it is closed.
@@ -102,7 +105,7 @@ public class Channel<T>
             processor.accept(result.value);
     }
 
-    private synchronized PutRequest<T> doPut(T value) throws ChannelClosedException
+    private synchronized PutRequest<T> putRequest(T value) throws ChannelClosedException
     {
         if (closed.get())
             throw new ChannelClosedException();
@@ -111,20 +114,7 @@ public class Channel<T>
             request.setCompleted();
         putQueue.offer(request);
         processQueues();
-        notifyListeners();
         return request;
-    }
-
-    /**
-     * Gets and removes a value from the channel, without blocking. If the channel is closed, or contains no values, a
-     * result is returned that contains no value.
-     */
-    GetResult<T> getNonBlocking()
-    {
-        synchronized (this)
-        {
-            return putQueue.isEmpty() ? new GetResult<>() : get();
-        }
     }
 
     /**
@@ -134,10 +124,10 @@ public class Channel<T>
      */
     public GetResult<T> get()
     {
-        return doGet().response().result();
+        return getRequest().response().result();
     }
 
-    private synchronized GetRequest<T> doGet()
+    synchronized GetRequest<T> getRequest()
     {
         if (closed.get())
             return new GetRequest<>();
@@ -157,40 +147,23 @@ public class Channel<T>
         PutRequest<T> putRequest = putQueue.pop();
         getRequest.setReturnedValue(putRequest.value);
     }
+    
+    void cancel(GetRequest<T> request)
+    {
+        synchronized(this)
+        {
+            getQueue.remove(request);
+        }
+        request.setChannelClosed();
+    }
 
-    void addListener(ChannelListener listener)
-    {
-        synchronized (listeners)
-        {
-            listeners.add(listener);
-        }
-    }
-    
-    void removeListener(ChannelListener listener)
-    {
-        synchronized (listeners)
-        {
-            listeners.remove(listener);
-        }
-    }
-    
-    private void notifyListeners()
-    {
-        List<ChannelListener> lCopy = new LinkedList<>();
-        synchronized (listeners)
-        {
-            lCopy.addAll(listeners);
-        }
-        lCopy.stream().forEach(ChannelListener::channelChanged);
-    }
-    
     private static interface Request
     {
         void setChannelClosed();
     }
 
     @FunctionalInterface
-    private static interface GetResponse<T>
+    static interface GetResponse<T>
     {
         GetResult<T> result();
     }
@@ -199,7 +172,7 @@ public class Channel<T>
     {
     }
 
-    private static class GetRequest<T> implements Request
+    static class GetRequest<T> implements Request
     {
         private final CompletableFuture<GetResponse<T>> responder = new CompletableFuture<>();
 
