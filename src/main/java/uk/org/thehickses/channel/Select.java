@@ -2,9 +2,7 @@ package uk.org.thehickses.channel;
 
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import uk.org.thehickses.channel.Channel.GetRequest;
 
@@ -12,9 +10,7 @@ public class Select
 {
     public static <T> Selecter withCase(Channel<T> channel, Consumer<T> processor)
     {
-        Selecter answer = new Selecter();
-        answer.addCase(new ChannelCase<>(channel, processor));
-        return answer;
+        return new Selecter().withCase(channel, processor);
     }
 
     public static class Selecter
@@ -26,7 +22,6 @@ public class Select
         }
 
         public <T> Selecter withCase(Channel<T> channel, Consumer<T> processor)
-                throws IllegalStateException
         {
             addCase(new ChannelCase<>(channel, processor));
             return this;
@@ -45,23 +40,23 @@ public class Select
 
         public void run()
         {
+            SelectGroup selectGroup = new SelectGroup();
             Channel<Void> doneChannel = new Channel<>();
-            List<CaseRunner<?>> runners = cases
-                    .stream()
-                    .map(c -> doneChannel.isOpen() ? c.runCase(doneChannel) : null)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
+            cases.stream().forEach(c -> {
+                if (doneChannel.isOpen())
+                    c.runCase(doneChannel, selectGroup);
+            });
             doneChannel.get();
-            runners.forEach(CaseRunner::cancel);
+            selectGroup.cancel();
         }
 
     }
-    
+
     public static class FinalSelecter
     {
         private final Selecter selecter;
 
-        public FinalSelecter(Selecter selecter)
+        private FinalSelecter(Selecter selecter)
         {
             this.selecter = selecter;
         }
@@ -83,11 +78,10 @@ public class Select
             this.processor = processor;
         }
 
-        public CaseRunner<T> runCase(Channel<Void> doneChannel)
+        public void runCase(Channel<Void> doneChannel, SelectGroup selectGroup)
         {
-            CaseRunner<T> cr = new CaseRunner<>(this, doneChannel);
+            CaseRunner<T> cr = new CaseRunner<>(this, doneChannel, selectGroup);
             new Thread(cr).start();
-            return cr;
         }
     }
 
@@ -98,11 +92,15 @@ public class Select
         private final GetRequest<T> request;
         private final Channel<Void> doneChannel;
 
-        public CaseRunner(ChannelCase<T> channelCase, Channel<Void> doneChannel)
+        public CaseRunner(ChannelCase<T> channelCase, Channel<Void> doneChannel,
+                SelectGroup selectGroup)
         {
             this.channel = channelCase.channel;
             this.processor = channelCase.processor;
-            this.request = channel == null ? null : channel.getRequest();
+            this.request = channel == null ? null : channel.getRequest(r -> {
+                selectGroup.addRequest(channel, r);
+                return selectGroup;
+            });
             this.doneChannel = doneChannel;
         }
 
@@ -113,12 +111,6 @@ public class Select
             doneChannel.close();
             if (result.containsValue)
                 processor.accept(result.value);
-        }
-
-        public void cancel()
-        {
-            if (channel != null)
-                channel.cancel(request);
         }
     }
 }
