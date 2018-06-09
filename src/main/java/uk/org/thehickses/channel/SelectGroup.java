@@ -13,7 +13,10 @@ class SelectGroup
 
     public <T> void addRequest(Channel<T> channel, GetRequest<T> request)
     {
-        membersByRequest.put(request, new GroupMember<>(channel, request));
+        synchronized (membersByRequest)
+        {
+            membersByRequest.put(request, new GroupMember<>(channel, request));
+        }
     }
 
     public boolean select(GetRequest<?> req)
@@ -31,8 +34,11 @@ class SelectGroup
 
     private void cancelAllExcept(GetRequest<?> req)
     {
-        membersByRequest.entrySet().stream().filter(e -> e.getKey() != req).forEach(
-                e -> e.getValue().cancel());
+        synchronized (membersByRequest)
+        {
+            membersByRequest.entrySet().stream().filter(e -> e.getKey() != req).forEach(
+                    e -> e.getValue().cancel());
+        }
     }
 
     private static class GroupMember<T>

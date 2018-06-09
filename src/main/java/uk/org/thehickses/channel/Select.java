@@ -108,9 +108,11 @@ public class Select
         {
             GetResult<T> result = request == null ? new GetResult<>(null)
                     : request.response().result();
-            doneChannel.close();
             if (result.containsValue)
+            {
                 processor.accept(result.value);
+                doneChannel.close();
+            }
         }
     }
 }
