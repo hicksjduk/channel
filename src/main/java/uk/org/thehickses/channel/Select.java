@@ -10,41 +10,66 @@ import uk.org.thehickses.channel.Channel.GetRequest;
 
 public class Select
 {
-    private final List<ChannelCase<?>> cases = new LinkedList<>();
-    private boolean hasDefault = false;
-
-    public <T> Select withCase(Channel<T> channel, Consumer<T> processor) throws IllegalStateException
+    public static <T> Selecter withCase(Channel<T> channel, Consumer<T> processor)
     {
-        addCase(new ChannelCase<>(channel, processor));
-        return this;
+        Selecter answer = new Selecter();
+        answer.addCase(new ChannelCase<>(channel, processor));
+        return answer;
     }
 
-    public Select withDefault(Runnable processor) throws IllegalStateException
+    public static class Selecter
     {
-        if (cases.isEmpty())
-            throw new IllegalStateException("There are no cases, adding a default makes no sense");
-        addCase(new ChannelCase<Void>(null, v -> processor.run()));
-        hasDefault = true;
-        return this;
+        private final List<ChannelCase<?>> cases = new LinkedList<>();
+
+        private Selecter()
+        {
+        }
+
+        public <T> Selecter withCase(Channel<T> channel, Consumer<T> processor)
+                throws IllegalStateException
+        {
+            addCase(new ChannelCase<>(channel, processor));
+            return this;
+        }
+
+        public FinalSelecter withDefault(Runnable processor)
+        {
+            addCase(new ChannelCase<Void>(null, v -> processor.run()));
+            return new FinalSelecter(this);
+        }
+
+        private void addCase(ChannelCase<?> newCase)
+        {
+            cases.add(newCase);
+        }
+
+        public void run()
+        {
+            Channel<Void> doneChannel = new Channel<>();
+            List<CaseRunner<?>> runners = cases
+                    .stream()
+                    .map(c -> doneChannel.isOpen() ? c.runCase(doneChannel) : null)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            doneChannel.get();
+            runners.forEach(CaseRunner::cancel);
+        }
+
     }
     
-    private void addCase(ChannelCase<?> newCase) throws IllegalStateException
+    public static class FinalSelecter
     {
-        if (hasDefault)
-            throw new IllegalStateException("Default already added, no more cases can be specified");
-        cases.add(newCase);
-    }
+        private final Selecter selecter;
 
-    public void run()
-    {
-        Channel<Void> doneChannel = new Channel<>();
-        List<CaseRunner<?>> runners = cases
-                .stream()
-                .map(c -> doneChannel.isOpen() ? c.runCase(doneChannel) : null)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-        doneChannel.get();
-        runners.forEach(CaseRunner::cancel);
+        public FinalSelecter(Selecter selecter)
+        {
+            this.selecter = selecter;
+        }
+
+        public void run()
+        {
+            selecter.run();
+        }
     }
 
     private static class ChannelCase<T>
