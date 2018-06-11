@@ -40,7 +40,7 @@ set to false. Closing an already-closed channel has no effect.
 
 Some examples of Go code using channels, and their Java equivalents:
 
-### Create an channel
+### Create a channel
 
 **Go**
 ```go
