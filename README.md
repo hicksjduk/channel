@@ -1,4 +1,4 @@
-# Channel
+# Channels
 
 As a Java programmer, when I learned the Go language I was somewhat underwhelmed. The only thing
 that really impressed me was the ease and efficiency of concurrency using goroutines and channels.
@@ -6,7 +6,7 @@ that really impressed me was the ease and efficiency of concurrency using gorout
 Channels are a powerful way for concurrent routines to communicate; so this is my attempt to create
 a Java emulation of the Go channel.
 
-## Channel<T>
+## Channel
 
 A channel is a first-in, first-out queue of data items of a particular type. 
 They are most frequently used for communication and co-ordination between concurrent routines, 
@@ -37,6 +37,12 @@ causes an exception to be thrown; this can be pre-empted by using the putIfOpen(
 only puts the value if the channel is open, and returns a flag to indicate whether that is the case.
 Reading from a closed channel returns a result with containsValue
 set to false. Closing an already-closed channel has no effect.
+
+Some examples of Go code using channels, and their Java equivalents:
+
+| Go | Java |
+|---|---|
+|`ch := make(chan string)` | `Channel<String> ch = new Channel<>();`|
 
 ## Select
 
