@@ -31,10 +31,10 @@ get() method, and passes each value retrieved to the specified Consumer, until t
 closed. 
 
 A channel can only be used for communication until it is closed. Closing a channel is often used
-to trigger a state change in the the process which reads the channel (it should terminate, or 
+to trigger a state change in the process which reads the channel (it should terminate, or 
 should move on to a different stage of its processing). Attempting to write to a closed channel
 causes an exception to be thrown; this can be pre-empted by using the putIfOpen() method, which
-only puts the value if the channel is open, and returns a flag to indicate whether that is the case.
+only puts the value if the channel is open, and returns a flag to indicate whether that was the case.
 Reading from a closed channel returns a result with containsValue
 set to false. Closing an already-closed channel has no effect.
 
