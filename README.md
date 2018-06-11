@@ -43,7 +43,8 @@ Some examples of Go code using channels, and their Java equivalents:
 || Go | Java |
 |---|---|---|
 | Create a channel |`ch := make(chan string)` | `Channel<String> ch = new Channel<>();`|
-| Read from a channel |`v := <-ch` | `String v = ch.get();`|
+| Read from a channel |`v, ok := <-ch` | `GetResult<String> v = ch.get();`|
+| Check whether a value was read, and print it to stdout if so |`if ok fmt.Println(v)` | `if (v.containsValue) System.out.println(v.value);`|
 
 ## Select
 
