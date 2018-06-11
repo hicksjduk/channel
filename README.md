@@ -45,38 +45,39 @@ at the same time; whenever a value is read from any of the specified channels, i
 the select completes. The select may also optionally have a default clause, in which
 case the default clause is executed, and the select completes, even if none of the specified channels
 has an available value. Without a default clause, the select blocks until a value is available on one
-of the channels.
+of the channels, or all the channels are closed.
 
 An equivalent Java implementation of this is also provided in this package. Shown below is a Go select
 statement and its Java equivalent:
 
 **Go**  
 ```go
-channelA, channelB, channelC := make(chan int), make(chan bool), make(chan string)
-select {
-	case value := <-channelA:
-		// process value which is an int  
-	case value := <-channelB:
-		// process value which is a bool
-	case value := <-channelC:
-		// process value which is a string
-	default:
-		// do default processing
+func doSelect(channelA chan int, channelB chan bool, channelC chan string) {
+	select {
+		case value := <-channelA:
+			// process value which is an int  
+		case value := <-channelB:
+			// process value which is a bool
+		case value := <-channelC:
+			// process value which is a string
+		default:
+			// do default processing
+	}
 }
 ```
 
 **Java**  
 ```java
-Channel<Integer> channelA = new Channel<>();
-Channel<Boolean> channelB = new Channel<>();
-Channel<String> channelC = new Channel<>();
-Select.withCase(channelA, value -> {
-	// process value which is an Integer  
-}).withCase(channelB, value -> {
-	// process value which is a Boolean  
-}).withCase(channelC, value -> {
-	// process value which is a String  
-}).withDefault(() -> {
-	// do default processing
-}).run();
+void doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<String> channelC)
+{
+	Select.withCase(channelA, value -> {
+		// process value which is an Integer  
+	}).withCase(channelB, value -> {
+		// process value which is a Boolean  
+	}).withCase(channelC, value -> {
+		// process value which is a String  
+	}).withDefault(() -> {
+		// do default processing
+	}).run();
+}
 ```
