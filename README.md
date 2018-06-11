@@ -43,6 +43,7 @@ Some examples of Go code using channels, and their Java equivalents:
 | Go | Java |
 |---|---|
 |`ch := make(chan string)` | `Channel<String> ch = new Channel<>();`|
+|`v := <-ch` | `String v = ch.get();`|
 
 ## Select
 
