@@ -40,11 +40,33 @@ set to false. Closing an already-closed channel has no effect.
 
 Some examples of Go code using channels, and their Java equivalents:
 
-|| Go | Java |
-|---|---|---|
-| Create a channel |`ch := make(chan string)` | `Channel<String> ch = new Channel<>();`|
-| Read from a channel |`v, ok := <-ch` | `GetResult<String> v = ch.get();`|
-| Check whether a value was read, and print it to stdout if so |`if ok fmt.Println(v)` | `if (v.containsValue) System.out.println(v.value);`|
+#### Create a channel
+
+**Go**
+```go
+ch := make(chan string)
+``` 
+
+**Java**
+```java
+Channel<String> ch = new Channel<>();
+``` 
+
+#### Read from a channel, check whether a value was read, and print it to stdout if so
+
+**Go**
+```go
+if v, ok := <-ch; ok {
+	fmt.Println(v)
+}
+``` 
+
+**Java**
+```java
+GetResult<String> v = ch.get();
+if (v.containsValue) 
+	System.out.println(v.value);
+``` 
 
 ## Select
 
