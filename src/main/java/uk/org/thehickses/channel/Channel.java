@@ -8,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * A class that emulates the action of a channel in the Go language.
@@ -67,7 +68,7 @@ public class Channel<T>
      */
     public void put(T value) throws ChannelClosedException
     {
-        doPut(value).response();
+        putRequest(value).response();
     }
 
     /**
@@ -87,6 +88,11 @@ public class Channel<T>
         }
     }
 
+    public boolean isOpen()
+    {
+        return !closed.get();
+    }
+
     /**
      * Processes values from the channel until it is closed.
      * 
@@ -100,7 +106,7 @@ public class Channel<T>
             processor.accept(result.value);
     }
 
-    private synchronized PutRequest<T> doPut(T value) throws ChannelClosedException
+    private synchronized PutRequest<T> putRequest(T value) throws ChannelClosedException
     {
         if (closed.get())
             throw new ChannelClosedException();
@@ -113,32 +119,23 @@ public class Channel<T>
     }
 
     /**
-     * Gets and removes a value from the channel, without blocking. If the channel is closed, or contains no values, a
-     * result is returned that contains no value.
-     */
-    GetResult<T> getNonBlocking()
-    {
-        synchronized (this)
-        {
-            return putQueue.isEmpty() ? new GetResult<>() : get();
-        }
-    }
-
-    /**
      * Gets and removes a value from the channel. If the channel contains no values, this call blocks until a value
      * becomes available. If the channel is closed (either at the time the request is made, or before a value becomes
      * available), a result is returned that contains no value.
      */
     public GetResult<T> get()
     {
-        return doGet().response().result();
+        return getRequest(null).response().result();
     }
 
-    private synchronized GetRequest<T> doGet()
+    synchronized GetRequest<T> getRequest(Function<GetRequest<T>, SelectGroup> selectGroupSupplier)
     {
+        GetRequest<T> request = new GetRequest<>(selectGroupSupplier);
         if (closed.get())
-            return new GetRequest<>();
-        GetRequest<T> request = new GetRequest<>();
+        {
+            request.setChannelClosed();
+            return request;
+        }
         getQueue.offer(request);
         processQueues();
         return request;
@@ -146,13 +143,25 @@ public class Channel<T>
 
     private synchronized void processQueues()
     {
-        if (getQueue.isEmpty() || putQueue.isEmpty())
-            return;
-        GetRequest<T> getRequest = getQueue.pop();
-        if (putQueue.size() > bufferSize)
-            putQueue.get(bufferSize).setCompleted();
-        PutRequest<T> putRequest = putQueue.pop();
-        getRequest.setReturnedValue(putRequest.value);
+        while (!getQueue.isEmpty() && !putQueue.isEmpty())
+        {
+            GetRequest<T> getRequest = getQueue.pop();
+            if (getRequest.selectGroup != null && !getRequest.selectGroup.select(getRequest))
+                continue;
+            if (putQueue.size() > bufferSize)
+                putQueue.get(bufferSize).setCompleted();
+            PutRequest<T> putRequest = putQueue.pop();
+            getRequest.setReturnedValue(putRequest.value);
+        }
+    }
+
+    void cancel(GetRequest<T> request)
+    {
+        synchronized (this)
+        {
+            getQueue.remove(request);
+        }
+        request.setNoValue();
     }
 
     private static interface Request
@@ -161,7 +170,7 @@ public class Channel<T>
     }
 
     @FunctionalInterface
-    private static interface GetResponse<T>
+    static interface GetResponse<T>
     {
         GetResult<T> result();
     }
@@ -170,12 +179,23 @@ public class Channel<T>
     {
     }
 
-    private static class GetRequest<T> implements Request
+    static class GetRequest<T> implements Request
     {
         private final CompletableFuture<GetResponse<T>> responder = new CompletableFuture<>();
+        public final SelectGroup selectGroup;
+
+        public GetRequest(Function<GetRequest<T>, SelectGroup> selectGroupSupplier)
+        {
+            this.selectGroup = selectGroupSupplier == null ? null : selectGroupSupplier.apply(this);
+        }
 
         @Override
         public void setChannelClosed()
+        {
+            setNoValue();
+        }
+
+        public void setNoValue()
         {
             responder.complete(() -> new GetResult<>());
         }
