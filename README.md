@@ -60,6 +60,8 @@ select {
 		// process value which is a bool
 	case value := <-channelC:
 		// process value which is a string
+	default:
+		// do default processing
 }
 ```
 
@@ -69,10 +71,12 @@ Channel<Integer> channelA = new Channel<>();
 Channel<Boolean> channelB = new Channel<>();
 Channel<String> channelC = new Channel<>();
 Select.withCase(channelA, value -> {
-		// process value which is an Integer  
+	// process value which is an Integer  
 }).withCase(channelB, value -> {
-		// process value which is a Boolean  
+	// process value which is a Boolean  
 }).withCase(channelC, value -> {
-		// process value which is a String  
-}).run()
+	// process value which is a String  
+}).withDefault(() -> {
+	// do default processing
+}).run();
 ```
