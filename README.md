@@ -119,7 +119,7 @@ case the default clause is executed, and the select completes, even if none of t
 has an available value. Without a default clause, the select blocks until a value is available on one
 of the channels, or all the channels are closed.
 
-An equivalent Java implementation of this is also provided in this package. Shown below is a Go select
+An equivalent Java implementation of this is also provided in this package. Shown below are a Go select
 statement and its Java equivalent:
 
 **Go**  
