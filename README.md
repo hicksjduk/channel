@@ -6,6 +6,8 @@ that really impressed me was the ease and efficiency of concurrency using gorout
 Channels are a powerful way for concurrent routines to communicate; so this is my attempt to create
 a Java emulation of the Go channel.
 
+## Channel<T>
+
 A channel is a first-in, first-out queue of data items of a particular type. 
 They are most frequently used for communication and co-ordination between concurrent routines, 
 as they are thread-safe.
@@ -35,3 +37,42 @@ causes an exception to be thrown; this can be pre-empted by using the putIfOpen(
 only puts the value if the channel is open, and returns a flag to indicate whether that is the case.
 Reading from a closed channel returns a result with containsValue
 set to false. Closing an already-closed channel has no effect.
+
+## Select
+
+Go provides a special case of the select statement which allows for multiple channels to be read
+at the same time; whenever a value is read from any of the specified channels, it is processed and
+the select completes. The select may also optionally have a default clause, in which
+case the default clause is executed, and the select completes, even if none of the specified channels
+has an available value. Without a default clause, the select blocks until a value is available on one
+of the channels.
+
+An equivalent Java implementation of this is also provided in this package. Shown below is a Go select
+statement and its Java equivalent:
+
+**Go**  
+```go
+channelA, channelB, channelC := make(chan int), make(chan bool), make(chan string)
+select {
+	case value := <-channelA:
+		// process value which is an int  
+	case value := <-channelB:
+		// process value which is a bool
+	case value := <-channelC:
+		// process value which is a string
+}
+```
+
+**Java**  
+```java
+Channel<Integer> channelA = new Channel<>();
+Channel<Boolean> channelB = new Channel<>();
+Channel<String> channelC = new Channel<>();
+Select.withCase(channelA, value -> {
+		// process value which is an Integer  
+}).withCase(channelB, value -> {
+		// process value which is a Boolean  
+}).withCase(channelC, value -> {
+		// process value which is a String  
+}).run()
+```
