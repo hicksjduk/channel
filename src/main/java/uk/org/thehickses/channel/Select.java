@@ -16,7 +16,6 @@ public class Select
     public static class Selecter
     {
         private final List<ChannelCase<?>> cases = new LinkedList<>();
-        private Runnable defaultProcessor;
 
         private Selecter()
         {
@@ -28,10 +27,9 @@ public class Select
             return this;
         }
 
-        public FinalSelecter withDefault(Runnable processor)
+        public SelecterWithDefault withDefault(Runnable processor)
         {
-            defaultProcessor = processor;
-            return new FinalSelecter(this);
+            return new SelecterWithDefault(this, processor);
         }
 
         private void addCase(ChannelCase<?> newCase)
@@ -40,29 +38,6 @@ public class Select
         }
 
         public void run()
-        {
-            if (defaultProcessor != null)
-                runSync();
-            else
-                runAsync();
-        }
-
-        private void runSync()
-        {
-            boolean allClosed = true;
-            for (ChannelCase<?> c : cases)
-            {
-                CaseResult result = c.runSync();
-                if (result == CaseResult.VALUE_READ)
-                    return;
-                if (result == CaseResult.NO_VALUE_AVAILABLE)
-                    allClosed = false;
-            }
-            if (!allClosed)
-                defaultProcessor.run();
-        }
-
-        private void runAsync()
         {
             int caseCount = cases.size();
             SelectGroup selectGroup = new SelectGroup();
@@ -75,18 +50,30 @@ public class Select
         }
     }
 
-    public static class FinalSelecter
+    public static class SelecterWithDefault
     {
-        private final Selecter selecter;
+        private final List<ChannelCase<?>> cases = new LinkedList<>();
+        private Runnable defaultProcessor;
 
-        private FinalSelecter(Selecter selecter)
+        public SelecterWithDefault(Selecter selecter, Runnable defaultProcessor)
         {
-            this.selecter = selecter;
+            this.cases.addAll(selecter.cases);
+            this.defaultProcessor = defaultProcessor;
         }
 
         public void run()
         {
-            selecter.run();
+            boolean allClosed = true;
+            for (ChannelCase<?> c : cases)
+            {
+                CaseResult result = c.runSync();
+                if (result == CaseResult.VALUE_READ)
+                    return;
+                if (result == CaseResult.NO_VALUE_AVAILABLE)
+                    allClosed = false;
+            }
+            if (!allClosed)
+                defaultProcessor.run();
         }
     }
 
