@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import org.junit.After;
 import org.junit.Test;
@@ -96,6 +97,22 @@ public class SelectTest
         Runnable m4 = mock(Runnable.class);
         Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run();
         verify(m4).run();
+        verifyNoMoreInteractions(m4);
+    }
+
+    @Test
+    public void testAllClosedNoDefault()
+    {
+        Stream.of(ch1, ch2, ch3).forEach(Channel::close);
+        Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run();
+    }
+
+    @Test
+    public void testAllClosedWithDefault()
+    {
+        Runnable m4 = mock(Runnable.class);
+        Stream.of(ch1, ch2, ch3).forEach(Channel::close);
+        Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run();
         verifyNoMoreInteractions(m4);
     }
 }

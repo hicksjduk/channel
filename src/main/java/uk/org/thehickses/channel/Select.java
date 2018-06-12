@@ -16,6 +16,7 @@ public class Select
     public static class Selecter
     {
         private final List<ChannelCase<?>> cases = new LinkedList<>();
+        private Runnable defaultProcessor;
 
         private Selecter()
         {
@@ -29,7 +30,7 @@ public class Select
 
         public FinalSelecter withDefault(Runnable processor)
         {
-            addCase(new ChannelCase<Void>(null, v -> processor.run()));
+            defaultProcessor = processor;
             return new FinalSelecter(this);
         }
 
@@ -40,14 +41,31 @@ public class Select
 
         public void run()
         {
-            SelectGroup selectGroup = new SelectGroup();
-            Channel<Void> doneChannel = new Channel<>();
-            cases.stream().forEach(c -> {
-                if (doneChannel.isOpen())
-                    c.runCase(doneChannel, selectGroup);
-            });
-            doneChannel.get();
-            selectGroup.cancel();
+            if (defaultProcessor != null)
+            {
+                boolean allClosed = true;
+                for (ChannelCase<?> c : cases)
+                {
+                    CaseResult result = c.runSync();
+                    if (result == CaseResult.NO_VALUE_AVAILABLE)
+                        allClosed = false;
+                    if (result == CaseResult.VALUE_READ)
+                        return;
+                }
+                if (!allClosed)
+                    defaultProcessor.run();
+            }
+            else
+            {
+                int caseCount = cases.size();
+                SelectGroup selectGroup = new SelectGroup();
+                Channel<Void> doneChannel = new Channel<>(caseCount);
+                cases.forEach(c -> c.runAsync(doneChannel, selectGroup));
+                for (int openChannels = caseCount; openChannels > 0; openChannels--)
+                    if (!doneChannel.get().containsValue)
+                        break;
+                selectGroup.cancel();
+            }
         }
 
     }
@@ -67,6 +85,11 @@ public class Select
         }
     }
 
+    private enum CaseResult
+    {
+        VALUE_READ, CHANNEL_CLOSED, NO_VALUE_AVAILABLE
+    }
+
     private static class ChannelCase<T>
     {
         public final Channel<T> channel;
@@ -78,10 +101,22 @@ public class Select
             this.processor = processor;
         }
 
-        public void runCase(Channel<Void> doneChannel, SelectGroup selectGroup)
+        public CaseResult runSync()
+        {
+            GetResult<T> result = channel.getNonBlocking();
+            if (result == null)
+                return CaseResult.NO_VALUE_AVAILABLE;
+            if (!result.containsValue)
+                return CaseResult.CHANNEL_CLOSED;
+            processor.accept(result.value);
+            return CaseResult.VALUE_READ;
+        }
+
+        public CaseRunner<T> runAsync(Channel<Void> doneChannel, SelectGroup selectGroup)
         {
             CaseRunner<T> cr = new CaseRunner<>(this, doneChannel, selectGroup);
             new Thread(cr).start();
+            return cr;
         }
     }
 
@@ -113,6 +148,8 @@ public class Select
                 processor.accept(result.value);
                 doneChannel.close();
             }
+            else
+                doneChannel.putIfOpen(null);
         }
     }
 }

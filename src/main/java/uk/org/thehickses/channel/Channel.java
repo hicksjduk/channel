@@ -127,6 +127,15 @@ public class Channel<T>
     {
         return getRequest(null).response().result();
     }
+    
+    synchronized GetResult<T> getNonBlocking()
+    {
+        if (!isOpen())
+            return new GetResult<>();
+        if (putQueue.isEmpty())
+            return null;
+        return get();
+    }
 
     synchronized GetRequest<T> getRequest(Function<GetRequest<T>, SelectGroup> selectGroupSupplier)
     {
