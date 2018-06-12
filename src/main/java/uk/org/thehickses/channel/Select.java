@@ -29,20 +29,32 @@ public class Select
 
         public SelecterWithDefault withDefault(Runnable processor)
         {
-            return new SelecterWithDefault(this, processor);
+            return new SelecterWithDefault(copyCases(), processor);
         }
 
         private void addCase(ChannelCase<?> newCase)
         {
-            cases.add(newCase);
+            synchronized (cases)
+            {
+                cases.add(newCase);
+            }
+        }
+
+        private List<ChannelCase<?>> copyCases()
+        {
+            synchronized (cases)
+            {
+                return new LinkedList<>(cases);
+            }
         }
 
         public void run()
         {
-            int caseCount = cases.size();
+            List<ChannelCase<?>> caseList = copyCases();
+            int caseCount = caseList.size();
             SelectGroup selectGroup = new SelectGroup();
             Channel<Void> doneChannel = new Channel<>(caseCount);
-            cases.forEach(c -> c.runAsync(doneChannel, selectGroup));
+            caseList.forEach(c -> c.runAsync(doneChannel, selectGroup));
             for (int openChannels = caseCount; openChannels > 0; openChannels--)
                 if (!doneChannel.get().containsValue)
                     break;
@@ -52,12 +64,12 @@ public class Select
 
     public static class SelecterWithDefault
     {
-        private final List<ChannelCase<?>> cases = new LinkedList<>();
-        private Runnable defaultProcessor;
+        private final List<ChannelCase<?>> cases;
+        private final Runnable defaultProcessor;
 
-        public SelecterWithDefault(Selecter selecter, Runnable defaultProcessor)
+        public SelecterWithDefault(List<ChannelCase<?>> cases, Runnable defaultProcessor)
         {
-            this.cases.addAll(selecter.cases);
+            this.cases = cases;
             this.defaultProcessor = defaultProcessor;
         }
 
