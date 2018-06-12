@@ -36,8 +36,7 @@ class SelectGroup
     {
         synchronized (members)
         {
-            members.stream().filter(m -> m.request != req).forEach(
-                    m -> m.cancel());
+            members.stream().filter(m -> m.request != req).forEach(GroupMember::cancel);
         }
     }
 
