@@ -20,6 +20,7 @@ import java.util.function.Function;
  */
 public class Channel<T>
 {
+    private final SelectGroupSupplier<T> nullSelectGroupSupplier = r -> null;
     private final int bufferSize;
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
@@ -125,9 +126,9 @@ public class Channel<T>
      */
     public GetResult<T> get()
     {
-        return getRequest(null).response().result();
+        return getRequest(nullSelectGroupSupplier).response().result();
     }
-    
+
     synchronized GetResult<T> getNonBlocking()
     {
         if (!isOpen())
@@ -137,7 +138,7 @@ public class Channel<T>
         return get();
     }
 
-    synchronized GetRequest<T> getRequest(Function<GetRequest<T>, SelectGroup> selectGroupSupplier)
+    synchronized GetRequest<T> getRequest(SelectGroupSupplier<T> selectGroupSupplier)
     {
         GetRequest<T> request = new GetRequest<>(selectGroupSupplier);
         if (closed.get())
@@ -188,14 +189,19 @@ public class Channel<T>
     {
     }
 
+    @FunctionalInterface
+    static interface SelectGroupSupplier<T> extends Function<GetRequest<T>, SelectGroup>
+    {
+    }
+
     static class GetRequest<T> implements Request
     {
         private final CompletableFuture<GetResponse<T>> responder = new CompletableFuture<>();
         public final SelectGroup selectGroup;
 
-        public GetRequest(Function<GetRequest<T>, SelectGroup> selectGroupSupplier)
+        public GetRequest(SelectGroupSupplier<T> selectGroupSupplier)
         {
-            this.selectGroup = selectGroupSupplier == null ? null : selectGroupSupplier.apply(this);
+            this.selectGroup = selectGroupSupplier.apply(this);
         }
 
         @Override
