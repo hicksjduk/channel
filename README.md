@@ -35,7 +35,7 @@ to trigger a state change in the process which reads the channel (it should term
 should move on to a different stage of its processing). Attempting to write to a closed channel
 causes an exception to be thrown; this can be pre-empted by using the `putIfOpen()` method, which
 only puts the value if the channel is open, and returns a flag to indicate whether that was the case.
-Reading from a closed channel returns a result with containsValue
+Reading from a closed channel returns a result with `containsValue`
 set to false. Closing an already-closed channel has no effect.
 
 Some examples of Go code using channels, and their Java equivalents:
