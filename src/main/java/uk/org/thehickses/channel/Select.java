@@ -63,8 +63,8 @@ public class Select
         }
 
         /**
-         * Runs the select. As this selecter has no default case, this method blocks until either a value is retrieved
-         * from one of the channels, or all the channels are closed.
+         * Runs the select. As this selecter has no default, this method blocks until either a value is retrieved from
+         * one of the channels, or all the channels are closed.
          */
         public void run()
         {
@@ -95,9 +95,9 @@ public class Select
         }
 
         /**
-         * Runs the select. As this selecter has a default case, this method reads each of the channels in turn, but
-         * does not block if any contains no value. If, after reading all the channels, none has a value and any are
-         * still open, the default processor is run.
+         * Runs the select. As this selecter has a default, this method reads each of the channels in turn, but does not
+         * block if any contains no value. If, after reading all the channels, none has a value and any are still open,
+         * the default processor is run.
          */
         public void run()
         {
