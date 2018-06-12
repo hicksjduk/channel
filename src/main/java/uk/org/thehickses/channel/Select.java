@@ -68,11 +68,10 @@ public class Select
          */
         public void run()
         {
-            List<ChannelCase<?>> caseList = copyCases();
-            int caseCount = caseList.size();
+            int caseCount = cases.size();
             SelectGroup selectGroup = new SelectGroup();
             Channel<Void> doneChannel = new Channel<>(caseCount);
-            caseList.forEach(c -> c.runAsync(doneChannel, selectGroup));
+            cases.forEach(c -> c.runAsync(doneChannel, selectGroup));
             for (int openChannels = caseCount; openChannels > 0; openChannels--)
                 if (!doneChannel.get().containsValue)
                     break;
