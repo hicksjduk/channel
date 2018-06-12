@@ -42,7 +42,7 @@ set to false. Closing an already-closed channel has no effect.
 **Note** that this implementation
 differs from Go in relation to closed channels in the following ways:
 * You can query whether a channel
-is open via the `isOpen` method.
+is open via the `isOpen()` method.
 * You can use `putIfOpen()` to write safely to a channel that
 might be closed.
 * It is not an error to close a channel that is already closed.
