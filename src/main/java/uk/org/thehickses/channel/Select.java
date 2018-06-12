@@ -1,53 +1,71 @@
 package uk.org.thehickses.channel;
 
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Consumer;
 
 import uk.org.thehickses.channel.Channel.GetRequest;
 
+/**
+ * A Java implementation of the Go select statement, for reading multiple channels.
+ * 
+ * @author Jeremy Hicks
+ */
 public class Select
 {
+    /**
+     * Creates a selecter which runs a case to read the specified channel, and process the retrieved value if there is
+     * one.
+     */
     public static <T> Selecter withCase(Channel<T> channel, Consumer<T> processor)
     {
-        return new Selecter().withCase(channel, processor);
+        return new Selecter(new ChannelCase<>(channel, processor));
     }
 
+    /**
+     * A selecter which has no default clause.
+     */
     public static class Selecter
     {
-        private final List<ChannelCase<?>> cases = new LinkedList<>();
+        private final List<ChannelCase<?>> cases;
 
-        private Selecter()
+        private Selecter(ChannelCase<?> newCase)
         {
+            cases = Arrays.asList(newCase);
         }
 
+        private Selecter(List<ChannelCase<?>> cases, ChannelCase<?> newCase)
+        {
+            (this.cases = cases).add(newCase);
+        }
+
+        /**
+         * Creates a selecter which adds a case, to read the specified channel and process the retrieved value if there
+         * is one, to the receiver.
+         */
         public <T> Selecter withCase(Channel<T> channel, Consumer<T> processor)
         {
-            addCase(new ChannelCase<>(channel, processor));
-            return this;
+            return new Selecter(copyCases(), new ChannelCase<>(channel, processor));
         }
 
+        /**
+         * Creates a selecter which adds a default processor to the receiver.
+         */
         public SelecterWithDefault withDefault(Runnable processor)
         {
             return new SelecterWithDefault(copyCases(), processor);
         }
 
-        private void addCase(ChannelCase<?> newCase)
-        {
-            synchronized (cases)
-            {
-                cases.add(newCase);
-            }
-        }
-
         private List<ChannelCase<?>> copyCases()
         {
-            synchronized (cases)
-            {
-                return new LinkedList<>(cases);
-            }
+            return new LinkedList<>(cases);
         }
 
+        /**
+         * Runs the select. As this selecter has no default case, this method blocks until either a value is retrieved
+         * from one of the channels, or all the channels are closed.
+         */
         public void run()
         {
             List<ChannelCase<?>> caseList = copyCases();
@@ -62,17 +80,25 @@ public class Select
         }
     }
 
+    /**
+     * A selecter which has a default clause.
+     */
     public static class SelecterWithDefault
     {
         private final List<ChannelCase<?>> cases;
         private final Runnable defaultProcessor;
 
-        public SelecterWithDefault(List<ChannelCase<?>> cases, Runnable defaultProcessor)
+        private SelecterWithDefault(List<ChannelCase<?>> cases, Runnable defaultProcessor)
         {
             this.cases = cases;
             this.defaultProcessor = defaultProcessor;
         }
 
+        /**
+         * Runs the select. As this selecter has a default case, this method reads each of the channels in turn, but
+         * does not block if any contains no value. If, after reading all the channels, none has a value and any are
+         * still open, the default processor is run.
+         */
         public void run()
         {
             boolean allClosed = true;
