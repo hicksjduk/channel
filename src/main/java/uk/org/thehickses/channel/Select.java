@@ -42,32 +42,37 @@ public class Select
         public void run()
         {
             if (defaultProcessor != null)
-            {
-                boolean allClosed = true;
-                for (ChannelCase<?> c : cases)
-                {
-                    CaseResult result = c.runSync();
-                    if (result == CaseResult.NO_VALUE_AVAILABLE)
-                        allClosed = false;
-                    if (result == CaseResult.VALUE_READ)
-                        return;
-                }
-                if (!allClosed)
-                    defaultProcessor.run();
-            }
+                runSync();
             else
-            {
-                int caseCount = cases.size();
-                SelectGroup selectGroup = new SelectGroup();
-                Channel<Void> doneChannel = new Channel<>(caseCount);
-                cases.forEach(c -> c.runAsync(doneChannel, selectGroup));
-                for (int openChannels = caseCount; openChannels > 0; openChannels--)
-                    if (!doneChannel.get().containsValue)
-                        break;
-                selectGroup.cancel();
-            }
+                runAsync();
         }
 
+        private void runSync()
+        {
+            boolean allClosed = true;
+            for (ChannelCase<?> c : cases)
+            {
+                CaseResult result = c.runSync();
+                if (result == CaseResult.VALUE_READ)
+                    return;
+                if (result == CaseResult.NO_VALUE_AVAILABLE)
+                    allClosed = false;
+            }
+            if (!allClosed)
+                defaultProcessor.run();
+        }
+
+        private void runAsync()
+        {
+            int caseCount = cases.size();
+            SelectGroup selectGroup = new SelectGroup();
+            Channel<Void> doneChannel = new Channel<>(caseCount);
+            cases.forEach(c -> c.runAsync(doneChannel, selectGroup));
+            for (int openChannels = caseCount; openChannels > 0; openChannels--)
+                if (!doneChannel.get().containsValue)
+                    break;
+            selectGroup.cancel();
+        }
     }
 
     public static class FinalSelecter
