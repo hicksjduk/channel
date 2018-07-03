@@ -20,9 +20,7 @@ a buffer size of 0, this means that a `put()` will block until a matching `get()
 A routine reads from the channel by calling its `get()` method. This removes and returns the first
 item in the channel; if the channel is empty, the call blocks until there is something there or the channel
 is closed.
-In Go, which supports multiple return values from a call,  
-reading from a channel returns both the value read, and a flag which says whether a value was actually
-read (which may not be the case if the channel was closed);
+In Go, which supports multiple return values from a call, reading from a channel returns both the value read, and a flag which says whether a value was actually read (which may not be the case if the channel was closed);
 this is simulated in Java by returning a `GetResult` object, in which there is a `containsValue` flag,
 and a `value` which is only meaningful if `containsValue` is `true`.
 
