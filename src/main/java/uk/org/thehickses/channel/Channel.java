@@ -98,13 +98,21 @@ public class Channel<T>
      * Processes values from the channel until it is closed.
      * 
      * @param processor
-     *            the processor that is invoked to process each value.
+     *            the processor that is invoked to process each value. This processor may signal that the iteration
+     *            should terminate by throwing a {@link RangeBreakException}.
      */
     public void range(Consumer<T> processor)
     {
         GetResult<T> result;
         while ((result = get()).containsValue)
-            processor.accept(result.value);
+            try
+            {
+                processor.accept(result.value);
+            }
+            catch (RangeBreakException ex)
+            {
+                break;
+            }
     }
 
     private synchronized PutRequest<T> putRequest(T value) throws ChannelClosedException
@@ -279,5 +287,10 @@ public class Channel<T>
                 }
             }
         }
+    }
+
+    @SuppressWarnings("serial")
+    public static class RangeBreakException extends RuntimeException
+    {
     }
 }

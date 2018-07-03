@@ -18,17 +18,22 @@ exceed the buffer size blocks until there is enough space in the buffer. (In the
 a buffer size of 0, this means that a `put()` will block until a matching `get()` request is received.)
 
 A routine reads from the channel by calling its `get()` method. This removes and returns the first
-item in the channel; if the channel is empty, the call blocks until there is something there.
+item in the channel; if the channel is empty, the call blocks until there is something there or the channel
+is closed.
 In Go, which supports multiple return values from a call,  
 reading from a channel returns both the value read, and a flag which says whether a value was actually
-read; this is simulated in Java by returning a `GetResult` object, in which there is a `containsValue` flag,
+read (which may not be the case if the channel was closed);
+this is simulated in Java by returning a `GetResult` object, in which there is a `containsValue` flag,
 and a `value` which is only meaningful if `containsValue` is `true`.
 
 Go provides an easy way to read and process values from a channel using its `range` operator.
 This implementation likewise provides the `range()` method. You pass to this method a
 `Consumer` of the data type handled by the channel, and it repeatedly calls the channel's
 `get()` method, and passes each value retrieved to the specified `Consumer`, until the channel is
-closed. 
+closed. In a Go range statement, the iteration can be explicitly terminated by a `break`, `continue` or
+`return` statement within the code that processes the value. In Java, this is not possible because the processing
+happens in a separate routine; however, explicit termination can be achieved by throwing a
+`RangeBreakException` within the processing code.
 
 A channel can only be used for communication until it is closed, which is done by calling its
 `close()` method. Closing a channel is often used
@@ -39,8 +44,8 @@ only puts the value if the channel is open, and returns a flag to indicate wheth
 Reading from a closed channel returns a result with `containsValue`
 set to false. Closing an already-closed channel has no effect.
 
-**Note** that this implementation
-differs from Go in relation to closed channels in the following ways:
+**Note** that in relation to closed channels, this implementation
+differs from Go in the following ways:
 * You can query whether a channel
 is open via the `isOpen()` method.
 * You can use `putIfOpen()` to write safely to a channel that
@@ -91,12 +96,15 @@ ch<- value
 ch.put(value);
 ``` 
 
-### Range over a channel (process values in turn until the channel is closed)
+### Range over a channel (process values in turn until the channel is closed), terminating the iteration if the value is "stop"
 
 **Go**
 ```go
 for value := range ch {
 	// Process value
+	if value == "stop" {
+		break
+	}
 }
 ``` 
 
@@ -104,6 +112,8 @@ for value := range ch {
 ```java
 ch.range(value -> {
 	// Process value
+	if (value.equals("stop"))
+		throw new RangeBreakException();
 });
 ``` 
 
