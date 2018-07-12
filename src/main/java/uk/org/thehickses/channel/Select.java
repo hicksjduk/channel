@@ -18,35 +18,35 @@ public class Select
      * Creates a selecter which runs a case to read the specified channel, and process the retrieved value if there is
      * one.
      */
-    public static <T> Selecter withCase(Channel<T> channel, Consumer<T> processor)
+    public static <T> SelecterWithoutDefault withCase(Channel<T> channel, Consumer<T> processor)
     {
-        return new Selecter(new ChannelCase<>(channel, processor));
+        return new SelecterWithoutDefault(new ChannelCase<>(channel, processor));
     }
 
     /**
      * A selecter which has no default clause.
      */
-    public static class Selecter
+    public static class SelecterWithoutDefault
     {
         private final List<ChannelCase<?>> cases;
 
-        private Selecter(ChannelCase<?> newCase)
+        private SelecterWithoutDefault(ChannelCase<?> newCase)
         {
             cases = Arrays.asList(newCase);
         }
 
-        private Selecter(List<ChannelCase<?>> cases, ChannelCase<?> newCase)
+        private SelecterWithoutDefault(SelecterWithoutDefault base, ChannelCase<?> newCase)
         {
-            (this.cases = cases).add(newCase);
+            (this.cases = new LinkedList<>(base.cases)).add(newCase);
         }
 
         /**
          * Creates a selecter which adds a case, to read the specified channel and process the retrieved value if there
          * is one, to the receiver.
          */
-        public <T> Selecter withCase(Channel<T> channel, Consumer<T> processor)
+        public <T> SelecterWithoutDefault withCase(Channel<T> channel, Consumer<T> processor)
         {
-            return new Selecter(copyCases(), new ChannelCase<>(channel, processor));
+            return new SelecterWithoutDefault(this, new ChannelCase<>(channel, processor));
         }
 
         /**
@@ -54,12 +54,7 @@ public class Select
          */
         public SelecterWithDefault withDefault(Runnable processor)
         {
-            return new SelecterWithDefault(copyCases(), processor);
-        }
-
-        private List<ChannelCase<?>> copyCases()
-        {
-            return new LinkedList<>(cases);
+            return new SelecterWithDefault(this, processor);
         }
 
         /**
@@ -87,9 +82,9 @@ public class Select
         private final List<ChannelCase<?>> cases;
         private final Runnable defaultProcessor;
 
-        private SelecterWithDefault(List<ChannelCase<?>> cases, Runnable defaultProcessor)
+        private SelecterWithDefault(SelecterWithoutDefault base, Runnable defaultProcessor)
         {
-            this.cases = cases;
+            this.cases = new LinkedList<>(base.cases);
             this.defaultProcessor = defaultProcessor;
         }
 

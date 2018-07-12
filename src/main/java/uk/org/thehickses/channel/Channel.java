@@ -85,8 +85,8 @@ public class Channel<T>
             if (closed.get())
                 return false;
             put(value);
-            return true;
         }
+        return true;
     }
 
     public boolean isOpen()
