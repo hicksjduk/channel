@@ -60,7 +60,7 @@ public class Channel<T>
         }
         requests.stream().forEach(r -> r.setChannelClosed());
     }
-    
+
     /**
      * Tells the channel to close when all the existing values have been consumed.
      */
@@ -69,7 +69,7 @@ public class Channel<T>
         closeWhenEmpty.set(true);
         closeIfEmpty();
     }
-    
+
     private synchronized void closeIfEmpty()
     {
         if (putQueue.isEmpty())
@@ -96,13 +96,15 @@ public class Channel<T>
      */
     public boolean putIfOpen(T value)
     {
-        synchronized (this)
+        try
         {
-            if (closed.get())
-                return false;
             put(value);
+            return true;
         }
-        return true;
+        catch (ChannelClosedException ex)
+        {
+            return false;
+        }
     }
 
     public boolean isOpen()
