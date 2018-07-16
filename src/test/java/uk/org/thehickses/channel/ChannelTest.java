@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
@@ -69,4 +71,25 @@ public class ChannelTest
             assertThat(values.get(i)).isEqualTo(i);
     }
 
+    @Test
+    public void testCloseWhenEmptyEmptyWhenCalled()
+    {
+        testCloseWhenEmpty(0);
+    }
+
+    @Test
+    public void testCloseWhenEmptyNotEmptyWhenCalled()
+    {
+        testCloseWhenEmpty(40000);
+    }
+    public void testCloseWhenEmpty(int valueCount)
+    {
+        Channel<Integer> ch = new Channel<>(valueCount);
+        for (int i = 0; i < valueCount; i++)
+            ch.put(i);
+        ch.closeWhenEmpty();
+        Set<Integer> values = new HashSet<>(valueCount);
+        ch.range(values::add);
+        assertThat(values.size()).isEqualTo(valueCount);
+    }
 }

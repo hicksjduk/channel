@@ -25,6 +25,7 @@ public class Channel<T>
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
     private final LinkedList<PutRequest<T>> putQueue = new LinkedList<>();
+    private final AtomicBoolean closeWhenEmpty = new AtomicBoolean();
 
     /**
      * Creates a channel with the default buffer size of 0.
@@ -58,6 +59,21 @@ public class Channel<T>
             putQueue.clear();
         }
         requests.stream().forEach(r -> r.setChannelClosed());
+    }
+    
+    /**
+     * Tells the channel to close when all the existing values have been consumed.
+     */
+    public void closeWhenEmpty()
+    {
+        closeWhenEmpty.set(true);
+        closeIfEmpty();
+    }
+    
+    private synchronized void closeIfEmpty()
+    {
+        if (putQueue.isEmpty())
+            close();
     }
 
     /**
@@ -171,6 +187,8 @@ public class Channel<T>
             PutRequest<T> putRequest = putQueue.pop();
             getRequest.setReturnedValue(putRequest.value);
         }
+        if (closeWhenEmpty.get())
+            closeIfEmpty();
     }
 
     void cancel(GetRequest<T> request)
