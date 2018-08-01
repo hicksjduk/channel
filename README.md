@@ -170,3 +170,8 @@ void doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<Stri
 	}).run();
 }
 ```
+
+**Note** that this implementation of the select differs from Go in how it behaves when all the selected
+channels are closed. In these circumstances, Go executes the handler for one of the cases, and which handler that is 
+is apparently chosen at random. The Java implementation executes no handler at all, not even the default handler
+if one is specified. I think it could be argued that this is an improvement on what Go does.
