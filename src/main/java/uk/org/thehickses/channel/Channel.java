@@ -182,7 +182,7 @@ public class Channel<T>
         while (!getQueue.isEmpty() && !putQueue.isEmpty())
         {
             GetRequest<T> getRequest = getQueue.pop();
-            if (getRequest.selectGroup != null && !getRequest.selectGroup.select(getRequest))
+            if (!getRequest.isSelectable())
                 continue;
             if (putQueue.size() > bufferSize)
                 putQueue.get(bufferSize).setCompleted();
@@ -227,7 +227,7 @@ public class Channel<T>
     static class GetRequest<T> implements Request
     {
         private final CompletableFuture<GetResponse<T>> responder = new CompletableFuture<>();
-        public final SelectGroup selectGroup;
+        private final SelectGroup selectGroup;
 
         public GetRequest(SelectGroupSupplier<T> selectGroupSupplier)
         {
@@ -248,6 +248,11 @@ public class Channel<T>
         public void setReturnedValue(T value)
         {
             responder.complete(() -> new GetResult<>(value));
+        }
+        
+        public boolean isSelectable()
+        {
+            return selectGroup == null || selectGroup.select(this);
         }
 
         public GetResponse<T> response()
