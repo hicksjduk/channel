@@ -135,7 +135,7 @@ public class Channel<T>
 
     private synchronized PutRequest<T> putRequest(T value) throws ChannelClosedException
     {
-        if (closed.get())
+        if (!isOpen())
             throw new ChannelClosedException();
         PutRequest<T> request = new PutRequest<>(value);
         if (putQueue.size() < bufferSize)
@@ -167,7 +167,7 @@ public class Channel<T>
     synchronized GetRequest<T> getRequest(SelectGroupSupplier<T> selectGroupSupplier)
     {
         GetRequest<T> request = new GetRequest<>(selectGroupSupplier);
-        if (closed.get())
+        if (!isOpen())
         {
             request.setChannelClosed();
             return request;
