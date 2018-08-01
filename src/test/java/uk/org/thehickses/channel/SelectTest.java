@@ -48,7 +48,7 @@ public class SelectTest
     private <T> void testWithSinglePut(Channel<T> channel, Consumer<T> receiver, T value)
     {
         new Thread(() -> channel.put(value)).start();
-        Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run();
+        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
         verify(receiver).accept(value);
     }
 
@@ -61,7 +61,7 @@ public class SelectTest
             ch2.put(false);
             ch3.put("Hej");
         }).start();
-        Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run();
+        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
         verify(m3).accept("Bonjour");
         assertThat(ch1.get().value).isEqualTo(981);
         assertThat(ch2.get().value).isEqualTo(false);
@@ -82,7 +82,7 @@ public class SelectTest
         SelecterWithoutDefault select = Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3);
         for (int count = valueCount.get().value; count > 0; count += valueCount.get().value)
         {
-            select.run();
+            assertThat(select.run()).isTrue();
             valueCount.put(-1);
         }
         verify(m1).accept(981);
@@ -95,7 +95,7 @@ public class SelectTest
     public void testWithDefault()
     {
         Runnable m4 = mock(Runnable.class);
-        Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run();
+        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run()).isTrue();
         verify(m4).run();
         verifyNoMoreInteractions(m4);
     }
@@ -104,7 +104,7 @@ public class SelectTest
     public void testAllClosedNoDefault()
     {
         Stream.of(ch1, ch2, ch3).forEach(Channel::close);
-        Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run();
+        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isFalse();
     }
 
     @Test
@@ -112,7 +112,7 @@ public class SelectTest
     {
         Runnable m4 = mock(Runnable.class);
         Stream.of(ch1, ch2, ch3).forEach(Channel::close);
-        Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run();
+        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run()).isFalse();
         verifyNoMoreInteractions(m4);
     }
 }

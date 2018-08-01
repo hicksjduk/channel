@@ -174,4 +174,10 @@ void doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<Stri
 **Note** that this implementation of the select differs from Go in how it behaves when all the selected
 channels are closed. In these circumstances, Go executes the handler for one of the cases, and which handler that is 
 is apparently chosen at random. The Java implementation executes no handler at all, not even the default handler
-if one is specified. I think it could be argued that this is an improvement on what Go does.
+if one is specified, and the `run()` method returns a boolean result - `true` if any case handler or the default
+handler was run, and `false` if none was run because all the channels are closed. 
+The execution of a random case 
+handler in Go is useful only in allowing the code to detect the case where all channels are closed, though since 
+the choice of handler is non-deterministic, all handlers must cater for that possibility. 
+I think it is arguable that the Java implementation presented here is an improvement as it separates the closure
+concern from the processing of values.

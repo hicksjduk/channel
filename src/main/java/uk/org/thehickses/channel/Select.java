@@ -60,8 +60,11 @@ public class Select
         /**
          * Runs the select. As this selecter has no default, this method blocks until either a value is retrieved from
          * one of the channels, or all the channels are closed.
+         * 
+         * @return whether a value was selected and processed. If this is false, it means that all the channels were
+         *         closed.
          */
-        public void run()
+        public boolean run()
         {
             int caseCount = cases.size();
             SelectGroup selectGroup = new SelectGroup();
@@ -69,8 +72,9 @@ public class Select
             cases.forEach(c -> c.runAsync(doneChannel, selectGroup));
             for (int openChannels = caseCount; openChannels > 0; openChannels--)
                 if (!doneChannel.get().containsValue)
-                    break;
+                    return true;
             selectGroup.cancel();
+            return false;
         }
     }
 
@@ -92,20 +96,24 @@ public class Select
          * Runs the select. As this selecter has a default, this method reads each of the channels in turn, but does not
          * block if any contains no value. If, after reading all the channels, none has a value and any are still open,
          * the default processor is run.
+         * 
+         * @return whether a value was selected and processed, or the default processor was run. If this is false, it
+         *         means that all the channels were closed.
          */
-        public void run()
+        public boolean run()
         {
             boolean allClosed = true;
             for (ChannelCase<?> c : cases)
             {
                 CaseResult result = c.runSync();
                 if (result == CaseResult.VALUE_READ)
-                    return;
+                    return true;
                 if (result != CaseResult.CHANNEL_CLOSED)
                     allClosed = false;
             }
             if (!allClosed)
                 defaultProcessor.run();
+            return !allClosed;
         }
     }
 
