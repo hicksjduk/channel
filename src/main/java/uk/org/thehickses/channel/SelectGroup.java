@@ -11,7 +11,7 @@ class SelectGroup
     private final List<GroupMember<?>> members = new ArrayList<>();
     private final AtomicReference<GetRequest<?>> selected = new AtomicReference<>();
 
-    public <T> void addRequest(Channel<T> channel, GetRequest<T> request)
+    public <T> void addMember(Channel<T> channel, GetRequest<T> request)
     {
         synchronized (members)
         {
