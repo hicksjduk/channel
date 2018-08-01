@@ -70,10 +70,16 @@ public class Select
             SelectGroup selectGroup = new SelectGroup();
             Channel<Void> doneChannel = new Channel<>(caseCount);
             cases.forEach(c -> c.runAsync(doneChannel, selectGroup));
-            for (int openChannels = caseCount; openChannels > 0; openChannels--)
-                if (!doneChannel.get().containsValue)
-                    return true;
-            selectGroup.cancel();
+            try
+            {
+                for (int openChannels = caseCount; openChannels > 0; openChannels--)
+                    if (!doneChannel.get().containsValue)
+                        return true;
+            }
+            finally
+            {
+                selectGroup.cancel();
+            }
             return false;
         }
     }
