@@ -9,7 +9,7 @@ import java.util.stream.Stream;
 import org.junit.After;
 import org.junit.Test;
 
-import uk.org.thehickses.channel.Select.SelecterWithoutDefault;
+import uk.org.thehickses.channel.Select.Selecter;
 
 @SuppressWarnings("unchecked")
 public class SelectTest
@@ -79,7 +79,7 @@ public class SelectTest
             ch2.put(false);
             ch3.put("Hej");
         }).start();
-        SelecterWithoutDefault select = Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3);
+        Selecter select = Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3);
         for (int count = valueCount.get().value; count > 0; count += valueCount.get().value)
         {
             assertThat(select.run()).isTrue();

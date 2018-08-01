@@ -22,11 +22,16 @@ public class Select
     {
         return new SelecterWithoutDefault(new ChannelCase<>(channel, processor));
     }
+    
+    public static interface Selecter
+    {
+        boolean run();
+    }
 
     /**
      * A selecter which has no default clause.
      */
-    public static class SelecterWithoutDefault
+    public static class SelecterWithoutDefault implements Selecter
     {
         private final List<ChannelCase<?>> cases;
 
@@ -64,6 +69,7 @@ public class Select
          * @return whether a value was selected and processed. If this is false, it means that all the channels were
          *         closed.
          */
+        @Override
         public boolean run()
         {
             int caseCount = cases.size();
@@ -87,7 +93,7 @@ public class Select
     /**
      * A selecter which has a default clause.
      */
-    public static class SelecterWithDefault
+    public static class SelecterWithDefault implements Selecter
     {
         private final List<ChannelCase<?>> cases;
         private final Runnable defaultProcessor;
@@ -106,6 +112,7 @@ public class Select
          * @return whether a value was selected and processed, or the default processor was run. If this is false, it
          *         means that all the channels were closed.
          */
+        @Override
         public boolean run()
         {
             boolean allClosed = true;
@@ -122,8 +129,8 @@ public class Select
             return !allClosed;
         }
     }
-
-    private enum CaseResult
+    
+    private static enum CaseResult
     {
         VALUE_READ, CHANNEL_CLOSED, NO_VALUE_AVAILABLE
     }
