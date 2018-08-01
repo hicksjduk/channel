@@ -101,7 +101,7 @@ public class Select
                 CaseResult result = c.runSync();
                 if (result == CaseResult.VALUE_READ)
                     return;
-                if (result == CaseResult.NO_VALUE_AVAILABLE)
+                if (result != CaseResult.CHANNEL_CLOSED)
                     allClosed = false;
             }
             if (!allClosed)
@@ -156,8 +156,8 @@ public class Select
         {
             this.channel = channelCase.channel;
             this.processor = channelCase.processor;
-            this.request = channel == null ? null : channel.getRequest(r -> {
-                selectGroup.addRequest(channel, r);
+            this.request = channel.getRequest(r -> {
+                selectGroup.addMember(channel, r);
                 return selectGroup;
             });
             this.doneChannel = doneChannel;
@@ -165,8 +165,7 @@ public class Select
 
         public void run()
         {
-            GetResult<T> result = request == null ? new GetResult<>(null)
-                    : request.response().result();
+            GetResult<T> result = request.response().result();
             if (result.containsValue)
             {
                 processor.accept(result.value);
