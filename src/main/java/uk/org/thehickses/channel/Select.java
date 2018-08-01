@@ -22,7 +22,7 @@ public class Select
     {
         return new SelecterWithoutDefault(new ChannelCase<>(channel, processor));
     }
-    
+
     public static interface Selecter
     {
         boolean run();
@@ -129,7 +129,7 @@ public class Select
             return !allClosed;
         }
     }
-    
+
     private static enum CaseResult
     {
         VALUE_READ, CHANNEL_CLOSED, NO_VALUE_AVAILABLE
@@ -169,24 +169,25 @@ public class Select
     {
         private final Channel<T> channel;
         private final Consumer<T> processor;
-        private final GetRequest<T> request;
         private final Channel<Void> doneChannel;
+        private final SelectGroup selectGroup;
 
         public CaseRunner(ChannelCase<T> channelCase, Channel<Void> doneChannel,
                 SelectGroup selectGroup)
         {
             this.channel = channelCase.channel;
             this.processor = channelCase.processor;
-            this.request = channel.getRequest(r -> {
-                selectGroup.addMember(channel, r);
-                return selectGroup;
-            });
             this.doneChannel = doneChannel;
+            this.selectGroup = selectGroup;
         }
 
         @Override
         public void run()
         {
+            GetRequest<T> request = channel.getRequest(r -> {
+                selectGroup.addMember(channel, r);
+                return selectGroup;
+            });
             GetResult<T> result = request.response().result();
             if (result.containsValue)
             {
