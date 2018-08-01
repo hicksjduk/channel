@@ -7,7 +7,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import org.junit.Test;
 
@@ -82,6 +84,7 @@ public class ChannelTest
     {
         testCloseWhenEmpty(40000);
     }
+
     public void testCloseWhenEmpty(int valueCount)
     {
         Channel<Integer> ch = new Channel<>(valueCount);
@@ -91,5 +94,55 @@ public class ChannelTest
         Set<Integer> values = new HashSet<>(valueCount);
         ch.range(values::add);
         assertThat(values.size()).isEqualTo(valueCount);
+    }
+
+    @Test
+    public void testCloseAfterPutThatTerminated()
+    {
+        testCloseAfterPut(1, ch -> ch.put(1));
+    }
+
+    @Test(expected=ChannelClosedException.class)
+    public void testCloseAfterPutThatBlocked()
+    {
+        testCloseAfterPut(0, ch -> ch.put(1));
+    }
+
+    public void testCloseAfterPutIfOpenThatTerminated()
+    {
+        testCloseAfterPut(1, ch -> assertThat(ch.putIfOpen(1)).isTrue());
+    }
+
+    @Test
+    public void testCloseAfterPutIfOpenThatBlocked()
+    {
+        testCloseAfterPut(0, ch -> assertThat(ch.putIfOpen(1)).isFalse());
+    }
+
+    private void testCloseAfterPut(int bufferSize, Consumer<Channel<Integer>> putter)
+    {
+        Channel<Integer> ch = new Channel<>(bufferSize);
+        Channel<Void> done = new Channel<>(1);
+        Runnable closer = () -> {
+            try
+            {
+                Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+                ch.close();
+                done.put(null);
+            }
+            catch (InterruptedException ex)
+            {
+                throw new RuntimeException(ex);
+            }
+        };
+        new Thread(closer).start();
+        try
+        {
+            putter.accept(ch);
+        }
+        finally
+        {
+            done.get();
+        }
     }
 }

@@ -81,11 +81,11 @@ public class Channel<T>
      * queue reduces to less than the channel's buffer size, or the value is used to satisfy a get request.
      * 
      * @throws ChannelClosedException
-     *             if the channel is closed at the time the request is made.
+     *             if the channel is closed at the time the request is made, or while the request is blocked.
      */
     public void put(T value) throws ChannelClosedException
     {
-        putRequest(value).response();
+        putRequest(value).response().result();
     }
 
     /**
@@ -213,8 +213,10 @@ public class Channel<T>
         GetResult<T> result();
     }
 
-    private static class PutResponse
+    @FunctionalInterface
+    private static interface PutResponse
     {
+        void result();
     }
 
     @FunctionalInterface
@@ -281,12 +283,12 @@ public class Channel<T>
         @Override
         public void setChannelClosed()
         {
-            responder.complete(new PutResponse());
+            responder.complete(() -> {throw new ChannelClosedException();});
         }
 
         public void setCompleted()
         {
-            responder.complete(new PutResponse());
+            responder.complete(() -> {});
         }
 
         public PutResponse response()
