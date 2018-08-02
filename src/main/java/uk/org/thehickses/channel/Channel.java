@@ -53,7 +53,7 @@ public class Channel<T>
             if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
                 return;
             requests = Stream.builder();
-            Consumer<? super Deque<? extends Request>> getAllAndClear = q -> {
+            Consumer<Deque<? extends Request>> getAllAndClear = q -> {
                 q.stream().forEach(requests::add);
                 q.clear();
             };
