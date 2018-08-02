@@ -195,6 +195,8 @@ public class Channel<T>
 
     void cancel(GetRequest<T> request)
     {
+        if (request.isComplete())
+            return;
         synchronized (this)
         {
             getQueue.remove(request);
@@ -249,10 +251,15 @@ public class Channel<T>
         {
             responder.complete(() -> new GetResult<>(value));
         }
-        
+
         public boolean isSelectable()
         {
             return selectGroup == null || selectGroup.select(this);
+        }
+
+        public boolean isComplete()
+        {
+            return responder.isDone();
         }
 
         public GetResponse<T> response()
@@ -288,12 +295,15 @@ public class Channel<T>
         @Override
         public void setChannelClosed()
         {
-            responder.complete(() -> {throw new ChannelClosedException();});
+            responder.complete(() -> {
+                throw new ChannelClosedException();
+            });
         }
 
         public void setCompleted()
         {
-            responder.complete(() -> {});
+            responder.complete(() -> {
+            });
         }
 
         public PutResponse response()
