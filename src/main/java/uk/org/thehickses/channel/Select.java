@@ -37,7 +37,7 @@ public class Select
 
         private SelecterWithoutDefault(ChannelCase<?> newCase)
         {
-            cases = Arrays.asList(newCase);
+            this.cases = Arrays.asList(newCase);
         }
 
         private SelecterWithoutDefault(SelecterWithoutDefault base, ChannelCase<?> newCase)
