@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * A class that emulates the action of a channel in the Go language.
+ * A class that emulates a channel in the Go language.
  * 
  * @author Jeremy Hicks
  *
@@ -90,7 +90,7 @@ public class Channel<T>
 
     /**
      * Puts the specified value into the channel, but only if the channel is open. This call blocks under the same
-     * conditions as the put() method, but does not throw an exception if the channel is closed.
+     * conditions as the {@link #put(Object)} method, but does not throw an exception if the channel is closed.
      * 
      * @return whether the channel was open, and therefore whether the value was actually put.
      */
@@ -147,8 +147,11 @@ public class Channel<T>
 
     /**
      * Gets and removes a value from the channel. If the channel contains no values, this call blocks until a value
-     * becomes available. If the channel is closed (either at the time the request is made, or before a value becomes
-     * available), a result is returned that contains no value.
+     * becomes available.
+     * 
+     * @return the result. If the channel was closed, either at the time of the call or while the request was blocked,
+     *         {@link GetResult#containsValue} is false; otherwise {@link GetResult#containsValue} is true and
+     *         {@link GetResult#value} contains the value retrieved.
      */
     public GetResult<T> get()
     {
@@ -218,7 +221,7 @@ public class Channel<T>
     @FunctionalInterface
     private static interface PutResponse
     {
-        void result();
+        void result() throws ChannelClosedException;
     }
 
     @FunctionalInterface
