@@ -6,7 +6,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -22,10 +22,9 @@ public class Channel<T>
 {
     private final SelectGroupSupplier<T> nullSelectGroupSupplier = r -> null;
     private final int bufferSize;
-    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final AtomicReference<Status> status = new AtomicReference<>(Status.OPEN);
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
     private final LinkedList<PutRequest<T>> putQueue = new LinkedList<>();
-    private final AtomicBoolean closeWhenEmpty = new AtomicBoolean();
 
     /**
      * Creates a channel with the default buffer size of 0.
@@ -51,7 +50,7 @@ public class Channel<T>
         List<Request> requests = new LinkedList<>();
         synchronized (this)
         {
-            if (!closed.compareAndSet(false, true))
+            if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
                 return;
             requests.addAll(getQueue);
             requests.addAll(putQueue);
@@ -66,8 +65,8 @@ public class Channel<T>
      */
     public void closeWhenEmpty()
     {
-        closeWhenEmpty.set(true);
-        closeIfEmpty();
+        if (status.compareAndSet(Status.OPEN, Status.CLOSE_WHEN_EMPTY))
+            closeIfEmpty();
     }
 
     private synchronized void closeIfEmpty()
@@ -109,7 +108,7 @@ public class Channel<T>
 
     public boolean isOpen()
     {
-        return !closed.get();
+        return status.get() != Status.CLOSED;
     }
 
     /**
@@ -192,7 +191,7 @@ public class Channel<T>
             PutRequest<T> putRequest = putQueue.pop();
             getRequest.setReturnedValue(putRequest.value);
         }
-        if (closeWhenEmpty.get())
+        if (status.get() == Status.CLOSE_WHEN_EMPTY)
             closeIfEmpty();
     }
 
@@ -332,5 +331,10 @@ public class Channel<T>
     @SuppressWarnings("serial")
     public static class RangeBreakException extends RuntimeException
     {
+    }
+
+    private static enum Status
+    {
+        OPEN, CLOSED, CLOSE_WHEN_EMPTY
     }
 }
