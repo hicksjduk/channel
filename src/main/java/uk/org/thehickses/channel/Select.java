@@ -186,6 +186,7 @@ public class Select
         {
             GetRequest<T> request = channel.getRequest(r -> selectGroup.addMember(channel, r));
             GetResult<T> result = request.response().result();
+            selectGroup.removeMember(request);
             if (result.containsValue)
             {
                 processor.accept(result.value);
