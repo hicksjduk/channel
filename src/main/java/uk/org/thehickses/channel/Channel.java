@@ -3,12 +3,12 @@ package uk.org.thehickses.channel;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 /**
  * A class that emulates a channel in the Go language.
@@ -47,17 +47,19 @@ public class Channel<T>
      */
     public void close()
     {
-        List<Request> requests = new LinkedList<>();
+        Stream.Builder<Request> requests;
         synchronized (this)
         {
             if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
                 return;
-            requests.addAll(getQueue);
-            requests.addAll(putQueue);
-            getQueue.clear();
-            putQueue.clear();
+            requests = Stream.builder();
+            Consumer<? super Deque<? extends Request>> getAllAndClear = q -> {
+                q.stream().forEach(requests::add);
+                q.clear();
+            };
+            Stream.of(getQueue, putQueue).forEach(getAllAndClear);
         }
-        requests.stream().forEach(Request::setChannelClosed);
+        requests.build().forEach(Request::setChannelClosed);
     }
 
     /**
