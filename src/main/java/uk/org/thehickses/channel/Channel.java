@@ -58,7 +58,7 @@ public class Channel<T>
             getQueue.clear();
             putQueue.clear();
         }
-        requests.stream().forEach(r -> r.setChannelClosed());
+        requests.stream().forEach(Request::setChannelClosed);
     }
 
     /**
