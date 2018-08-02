@@ -76,9 +76,9 @@ public class Select
             SelectGroup selectGroup = new SelectGroup();
             Channel<Void> doneChannel = new Channel<>(caseCount);
             cases.forEach(c -> c.runAsync(doneChannel, selectGroup));
-            // If a value has been retrieved and processed, its case runner closes doneChannel. If the channel a
-            // case runner is waiting for is closed, the case runner puts a value into doneChannel. So we loop until
-            // doneChannel is closed, or all the case runners have written a value to doneChannel.
+            // If a value has been retrieved and processed, the case runner closes doneChannel. If a channel
+            // is closed, each case runner that is waiting for it puts a value into doneChannel. So we loop until
+            // doneChannel is closed, or has received a value from every case runner.
             for (int openChannels = caseCount; openChannels > 0; openChannels--)
                 if (!doneChannel.get().containsValue)
                     return true;
