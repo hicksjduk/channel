@@ -62,7 +62,7 @@ public class Channel<T>
     /**
      * Tells the channel to close when all the existing values have been consumed.
      */
-    public void closeWhenEmpty()
+    public synchronized void closeWhenEmpty()
     {
         if (status.compareAndSet(Status.OPEN, Status.CLOSE_WHEN_EMPTY))
             closeIfEmpty();
