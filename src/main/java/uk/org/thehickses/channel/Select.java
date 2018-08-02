@@ -184,10 +184,7 @@ public class Select
         @Override
         public void run()
         {
-            GetRequest<T> request = channel.getRequest(r -> {
-                selectGroup.addMember(channel, r);
-                return selectGroup;
-            });
+            GetRequest<T> request = channel.getRequest(r -> selectGroup.addMember(channel, r));
             GetResult<T> result = request.response().result();
             if (result.containsValue)
             {

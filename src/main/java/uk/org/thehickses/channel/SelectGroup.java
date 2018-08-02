@@ -11,12 +11,13 @@ class SelectGroup
     private final List<GroupMember<?>> members = new ArrayList<>();
     private final AtomicReference<GetRequest<?>> selected = new AtomicReference<>();
 
-    public <T> void addMember(Channel<T> channel, GetRequest<T> request)
+    public <T> SelectGroup addMember(Channel<T> channel, GetRequest<T> request)
     {
         synchronized (members)
         {
             members.add(new GroupMember<>(channel, request));
         }
+        return this;
     }
 
     public boolean select(GetRequest<?> req)
