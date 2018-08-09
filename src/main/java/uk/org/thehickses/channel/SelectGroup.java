@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import uk.org.thehickses.channel.Channel.GetRequest;
 
-class SelectGroup
+class SelectGroup implements SelectController
 {
     private final List<GroupMember<?>> members = new ArrayList<>();
     private final AtomicReference<GetRequest<?>> selected = new AtomicReference<>();
@@ -20,6 +20,7 @@ class SelectGroup
         return this;
     }
 
+    @Override
     public boolean select(GetRequest<?> req)
     {
         if (!selected.compareAndSet(null, req))

@@ -7,7 +7,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
@@ -20,7 +19,6 @@ import java.util.stream.Stream;
  */
 public class Channel<T>
 {
-    private final SelectGroupSupplier<T> nullSelectGroupSupplier = r -> null;
     private final int bufferSize;
     private final AtomicReference<Status> status = new AtomicReference<>(Status.OPEN);
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
@@ -62,7 +60,7 @@ public class Channel<T>
     /**
      * Tells the channel to close when all the existing values have been consumed.
      */
-    public synchronized void closeWhenEmpty()
+    public void closeWhenEmpty()
     {
         if (status.compareAndSet(Status.OPEN, Status.CLOSE_WHEN_EMPTY))
             closeIfEmpty();
@@ -153,7 +151,7 @@ public class Channel<T>
      */
     public GetResult<T> get()
     {
-        return getRequest(nullSelectGroupSupplier).response().result();
+        return getRequest(null).response().result();
     }
 
     synchronized GetResult<T> getNonBlocking()
@@ -165,9 +163,9 @@ public class Channel<T>
         return get();
     }
 
-    synchronized GetRequest<T> getRequest(SelectGroupSupplier<T> selectGroupSupplier)
+    synchronized GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
-        GetRequest<T> request = new GetRequest<>(selectGroupSupplier);
+        GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
         if (!isOpen())
         {
             request.setChannelClosed();
@@ -222,19 +220,14 @@ public class Channel<T>
         void result() throws ChannelClosedException;
     }
 
-    @FunctionalInterface
-    static interface SelectGroupSupplier<T> extends Function<GetRequest<T>, SelectGroup>
-    {
-    }
-
     static class GetRequest<T> implements Request
     {
         private final CompletableFuture<GetResponse<T>> responder = new CompletableFuture<>();
-        private final SelectGroup selectGroup;
+        private final SelectController selectController;
 
-        public GetRequest(SelectGroupSupplier<T> selectGroupSupplier)
+        public GetRequest(SelectControllerSupplier<T> supplier)
         {
-            this.selectGroup = selectGroupSupplier.apply(this);
+            this.selectController = supplier == null ? r -> true : supplier.apply(this);
         }
 
         @Override
@@ -255,7 +248,7 @@ public class Channel<T>
 
         public boolean isSelectable()
         {
-            return selectGroup == null || selectGroup.select(this);
+            return selectController.select(this);
         }
 
         public boolean isComplete()
@@ -266,7 +259,6 @@ public class Channel<T>
         public GetResponse<T> response()
         {
             while (true)
-            {
                 try
                 {
                     return responder.get();
@@ -279,7 +271,6 @@ public class Channel<T>
                 {
                     throw new RuntimeException(e);
                 }
-            }
         }
     }
 
@@ -310,7 +301,6 @@ public class Channel<T>
         public PutResponse response()
         {
             while (true)
-            {
                 try
                 {
                     return responder.get();
@@ -323,7 +313,6 @@ public class Channel<T>
                 {
                     throw new RuntimeException(e);
                 }
-            }
         }
     }
 
