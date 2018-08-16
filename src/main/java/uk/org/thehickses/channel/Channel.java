@@ -1,6 +1,7 @@
 package uk.org.thehickses.channel;
 
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
@@ -51,8 +52,9 @@ public class Channel<T>
             if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
                 return;
             requests = Stream.builder();
-            Consumer<Deque<? extends Request>> getAll = q -> q.stream().forEach(requests::add);
-            Stream.of(getQueue, putQueue).forEach(getAll.andThen(Deque::clear));
+            Consumer<Collection<? extends Request>> getAll = q -> q.stream().forEach(requests::add);
+            Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(
+                    getAll.andThen(Collection::clear));
         }
         requests.build().forEach(Request::setChannelClosed);
     }
