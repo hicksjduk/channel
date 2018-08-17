@@ -52,11 +52,17 @@ public class Channel<T>
             if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
                 return;
             requests = Stream.builder();
-            Consumer<Collection<? extends Request>> getAll = q -> q.stream().forEach(requests::add);
-            Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(
-                    getAll.andThen(Collection::clear));
+            Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
         }
         requests.build().forEach(Request::setChannelClosed);
+    }
+
+    private static <V, C extends Collection<? extends V>> Consumer<C> drainer(Stream.Builder<V> target)
+    {
+        return source -> {
+            source.stream().forEach(target);
+            source.clear();
+        };
     }
 
     /**
