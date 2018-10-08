@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedList;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -109,8 +110,9 @@ public class Channel<T>
      *            the processor that is invoked to process each value. This processor may signal that the iteration
      *            should terminate by throwing a {@link RangeBreakException}.
      */
-    public void range(Consumer<T> processor)
+    public void range(Consumer<? super T> processor)
     {
+        Objects.requireNonNull(processor);
         GetResult<T> result;
         while ((result = get()).containsValue)
             try

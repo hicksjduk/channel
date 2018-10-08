@@ -3,7 +3,9 @@ package uk.org.thehickses.channel;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import uk.org.thehickses.channel.Channel.GetRequest;
 
@@ -18,8 +20,9 @@ public class Select
      * Creates a selecter which runs a case to read the specified channel, and process the retrieved value if there is
      * one.
      */
-    public static <T> SelecterWithoutDefault withCase(Channel<T> channel, Consumer<T> processor)
+    public static <T> SelecterWithoutDefault withCase(Channel<T> channel, Consumer<? super T> processor)
     {
+        Stream.of(channel, processor).forEach(Objects::requireNonNull);
         return new SelecterWithoutDefault(new ChannelCase<>(channel, processor));
     }
 
@@ -49,8 +52,9 @@ public class Select
          * Creates a selecter which adds a case, to read the specified channel and process the retrieved value if there
          * is one, to the receiver.
          */
-        public <T> SelecterWithoutDefault withCase(Channel<T> channel, Consumer<T> processor)
+        public <T> SelecterWithoutDefault withCase(Channel<T> channel, Consumer<? super T> processor)
         {
+            Stream.of(channel, processor).forEach(Objects::requireNonNull);
             return new SelecterWithoutDefault(this, new ChannelCase<>(channel, processor));
         }
 
@@ -59,6 +63,7 @@ public class Select
          */
         public SelecterWithDefault withDefault(Runnable processor)
         {
+            Objects.requireNonNull(processor);
             return new SelecterWithDefault(this, processor);
         }
 
@@ -134,9 +139,9 @@ public class Select
     private static class ChannelCase<T>
     {
         public final Channel<T> channel;
-        public final Consumer<T> processor;
+        public final Consumer<? super T> processor;
 
-        public ChannelCase(Channel<T> channel, Consumer<T> processor)
+        public ChannelCase(Channel<T> channel, Consumer<? super T> processor)
         {
             this.channel = channel;
             this.processor = processor;
@@ -164,7 +169,7 @@ public class Select
     private static class CaseRunner<T> implements Runnable
     {
         private final Channel<T> channel;
-        private final Consumer<T> processor;
+        private final Consumer<? super T> processor;
         private final Channel<Void> doneChannel;
         private final SelectGroup selectGroup;
 
