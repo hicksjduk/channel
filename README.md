@@ -34,23 +34,28 @@ happens in a separate routine; however, explicit termination can be achieved by 
 `RangeBreakException` within the processing code.
 
 A channel can only be used for communication until it is closed, which is done by calling its
-`close()` method. Closing a channel is often used
+`close()` method. Alternatively, the `closeWhenEmpty()` method can be used to
+denote that the channel should close automatically when all the values it contains have been
+consumed.
+Closing a channel is often used
 to trigger a state change in the process which reads the channel (it should terminate, or 
-should move on to a different stage of its processing). Attempting to write to a closed channel
-causes an exception to be thrown; this can be pre-empted by using the `putIfOpen()` method, which
+should move on to a different stage of its processing). 
+Attempting to write to a closed channel
+has no effect; the `put()` method
 only puts the value if the channel is open, and returns a flag to indicate whether that was the case.
 Reading from a closed channel returns a result with `containsValue`
-set to false. Closing an already-closed channel has no effect.
+set to false. Closing an already-closed channel has no effect; the `close()` method 
+returns a flag to indicate whether it actually closed the channel.
 
 **Note** that in relation to closed channels, this implementation
 differs from Go in the following ways:
 * You can query whether a channel
 is open via the `isOpen()` method.
-* You can use `putIfOpen()` to write safely to a channel that
-might be closed.
-* It is not an error to close a channel that is already closed.
+* It is not an error to write to or close a channel that is closed; the `put()` and `close()`
+methods have no effect on the channel if called on a closed channel, and return whether they
+actually changed the channel.
 
-Some examples of Go code using channels, and their Java equivalents:
+Some examples of Go code using channels, and their Java equivalents using this library:
 
 ### Create a channel
 

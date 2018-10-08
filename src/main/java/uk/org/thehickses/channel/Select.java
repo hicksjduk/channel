@@ -188,7 +188,7 @@ public class Select
                 doneChannel.close();
             }
             else
-                doneChannel.putIfOpen(null);
+                doneChannel.put(null);
         }
     }
 }

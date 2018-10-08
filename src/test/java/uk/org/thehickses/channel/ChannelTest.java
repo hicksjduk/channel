@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.junit.Test;
 
@@ -95,31 +95,37 @@ public class ChannelTest
         ch.range(values::add);
         assertThat(values.size()).isEqualTo(valueCount);
     }
+    
+    @Test
+    public void testDoubleClose()
+    {
+        Channel<Void> ch = new Channel<>();
+        assertThat(ch.close()).isTrue();
+        assertThat(ch.close()).isFalse();
+    }
+
+    @Test
+    public void testCloseBeforePut()
+    {
+        Channel<Integer> ch = new Channel<>();
+        ch.close();
+        assertThat(ch.put(1)).isFalse();
+    }
 
     @Test
     public void testCloseAfterPutThatTerminated()
     {
-        testCloseAfterPut(1, ch -> ch.put(1));
-    }
-
-    @Test(expected=ChannelClosedException.class)
-    public void testCloseAfterPutThatBlocked()
-    {
-        testCloseAfterPut(0, ch -> ch.put(1));
-    }
-
-    public void testCloseAfterPutIfOpenThatTerminated()
-    {
-        testCloseAfterPut(1, ch -> assertThat(ch.putIfOpen(1)).isTrue());
+        testCloseAfterPut(1, ch -> ch.put(1), true);
     }
 
     @Test
-    public void testCloseAfterPutIfOpenThatBlocked()
+    public void testCloseAfterPutThatBlocked()
     {
-        testCloseAfterPut(0, ch -> assertThat(ch.putIfOpen(1)).isFalse());
+        testCloseAfterPut(0, ch -> ch.put(1), false);
     }
 
-    private void testCloseAfterPut(int bufferSize, Consumer<Channel<Integer>> putter)
+    private void testCloseAfterPut(int bufferSize, Function<Channel<Integer>, Boolean> putter,
+            boolean expectedResult)
     {
         Channel<Integer> ch = new Channel<>(bufferSize);
         Channel<Void> done = new Channel<>(1);
@@ -138,7 +144,7 @@ public class ChannelTest
         new Thread(closer).start();
         try
         {
-            putter.accept(ch);
+            assertThat(putter.apply(ch)).isEqualTo(expectedResult);
         }
         finally
         {

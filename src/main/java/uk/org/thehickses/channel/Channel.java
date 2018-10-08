@@ -42,22 +42,26 @@ public class Channel<T>
     }
 
     /**
-     * Closes the channel and signals all pending requests that it is closed.
+     * If the channel is not already closed, closes the channel and signals all pending requests that it is closed.
+     * 
+     * @return whether this call closed the channel. A return value of false means that the channel was already closed.
      */
-    public void close()
+    public boolean close()
     {
         Stream.Builder<Request> requests;
         synchronized (this)
         {
             if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
-                return;
+                return false;
             requests = Stream.builder();
             Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
         }
         requests.build().forEach(Request::setChannelClosed);
+        return true;
     }
 
-    private static <V, C extends Collection<? extends V>> Consumer<C> drainer(Stream.Builder<V> target)
+    private static <V, C extends Collection<? extends V>> Consumer<C> drainer(
+            Stream.Builder<V> target)
     {
         return source -> {
             source.stream().forEach(target);
@@ -81,34 +85,16 @@ public class Channel<T>
     }
 
     /**
-     * Puts the specified value into the channel. This call blocks until the number of requests ahead of it in the put
-     * queue reduces to less than the channel's buffer size, or the value is used to satisfy a get request.
+     * Puts the specified value into the channel, as long as it is open. This call blocks until the number of requests
+     * ahead of it in the put queue reduces to less than the channel's buffer size, or the value is used to satisfy a
+     * get request.
      * 
-     * @throws ChannelClosedException
-     *             if the channel is closed at the time the request is made, or while the request is blocked.
+     * @return whether the value was put. A value of false means that the channel was closed at the time the request is
+     *         made, or became closed while the request was blocked.
      */
-    public void put(T value) throws ChannelClosedException
+    public boolean put(T value)
     {
-        putRequest(value).response().result();
-    }
-
-    /**
-     * Puts the specified value into the channel, but only if the channel is open. This call blocks under the same
-     * conditions as the {@link #put(Object)} method, but does not throw an exception if the channel is closed.
-     * 
-     * @return whether the channel was open, and therefore whether the value was actually put.
-     */
-    public boolean putIfOpen(T value)
-    {
-        try
-        {
-            put(value);
-            return true;
-        }
-        catch (ChannelClosedException ex)
-        {
-            return false;
-        }
+        return putRequest(value).response().result();
     }
 
     public boolean isOpen()
@@ -137,15 +123,18 @@ public class Channel<T>
             }
     }
 
-    private synchronized PutRequest<T> putRequest(T value) throws ChannelClosedException
+    private synchronized PutRequest<T> putRequest(T value)
     {
-        if (!isOpen())
-            throw new ChannelClosedException();
         PutRequest<T> request = new PutRequest<>(value);
-        if (putQueue.size() < bufferSize)
-            request.setCompleted();
-        putQueue.offer(request);
-        processQueues();
+        if (!isOpen())
+            request.setChannelClosed();
+        else
+        {
+            if (putQueue.size() < bufferSize)
+                request.setCompleted();
+            putQueue.offer(request);
+            processQueues();
+        }
         return request;
     }
 
@@ -225,7 +214,7 @@ public class Channel<T>
     @FunctionalInterface
     private static interface PutResponse
     {
-        void result() throws ChannelClosedException;
+        boolean result();
     }
 
     static class GetRequest<T> implements Request
@@ -295,15 +284,12 @@ public class Channel<T>
         @Override
         public void setChannelClosed()
         {
-            responder.complete(() -> {
-                throw new ChannelClosedException();
-            });
+            responder.complete(() -> false);
         }
 
         public void setCompleted()
         {
-            responder.complete(() -> {
-            });
+            responder.complete(() -> true);
         }
 
         public PutResponse response()
