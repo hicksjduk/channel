@@ -166,12 +166,12 @@ public class Channel<T>
     {
         GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
         if (!isOpen())
-        {
             request.setChannelClosed();
-            return request;
+        else
+        {
+            getQueue.offer(request);
+            processQueues();
         }
-        getQueue.offer(request);
-        processQueues();
         return request;
     }
 
