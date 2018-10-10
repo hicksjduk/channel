@@ -5,9 +5,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
-
-import uk.org.thehickses.channel.Channel.GetRequest;
 
 /**
  * A Java implementation of the Go select statement, for reading multiple channels.
@@ -20,7 +19,8 @@ public class Select
      * Creates a selecter which runs a case to read the specified channel, and process the retrieved value if there is
      * one.
      */
-    public static <T> SelecterWithoutDefault withCase(Channel<T> channel, Consumer<? super T> processor)
+    public static <T> SelecterWithoutDefault withCase(Channel<T> channel,
+            Consumer<? super T> processor)
     {
         Stream.of(channel, processor).forEach(Objects::requireNonNull);
         return new SelecterWithoutDefault(new ChannelCase<>(channel, processor));
@@ -52,7 +52,8 @@ public class Select
          * Creates a selecter which adds a case, to read the specified channel and process the retrieved value if there
          * is one, to the receiver.
          */
-        public <T> SelecterWithoutDefault withCase(Channel<T> channel, Consumer<? super T> processor)
+        public <T> SelecterWithoutDefault withCase(Channel<T> channel,
+                Consumer<? super T> processor)
         {
             Stream.of(channel, processor).forEach(Objects::requireNonNull);
             return new SelecterWithoutDefault(this, new ChannelCase<>(channel, processor));
@@ -79,15 +80,18 @@ public class Select
         {
             int caseCount = cases.size();
             SelectGroup selectGroup = new SelectGroup();
-            Channel<Void> doneChannel = new Channel<>(caseCount);
-            cases.forEach(c -> c.runAsync(doneChannel, selectGroup));
-            // If a value has been retrieved and processed, the case runner closes doneChannel. If a channel
-            // is closed, each case runner that is waiting for it puts a value into doneChannel. So we loop until
-            // doneChannel is closed, or has received a value from every case runner.
-            for (int openChannels = caseCount; openChannels > 0; openChannels--)
-                if (!doneChannel.get().containsValue)
-                    return true;
-            return false;
+            Channel<Runnable> processorRunnerChannel = new Channel<>(caseCount);
+            cases.forEach(c -> c.runAsync(processorRunnerChannel, selectGroup));
+            Runnable processorRunner = IntStream
+                    .range(0, caseCount)
+                    .mapToObj(i -> processorRunnerChannel.get().value)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+            if (processorRunner == null)
+                return false;
+            processorRunner.run();
+            return true;
         }
     }
 
@@ -158,9 +162,10 @@ public class Select
             return CaseResult.VALUE_READ;
         }
 
-        public CaseRunner<T> runAsync(Channel<Void> doneChannel, SelectGroup selectGroup)
+        public CaseRunner<T> runAsync(Channel<Runnable> processorRunnerChannel,
+                SelectGroup selectGroup)
         {
-            CaseRunner<T> cr = new CaseRunner<>(this, doneChannel, selectGroup);
+            CaseRunner<T> cr = new CaseRunner<>(this, processorRunnerChannel, selectGroup);
             new Thread(cr).start();
             return cr;
         }
@@ -170,30 +175,24 @@ public class Select
     {
         private final Channel<T> channel;
         private final Consumer<? super T> processor;
-        private final Channel<Void> doneChannel;
-        private final SelectGroup selectGroup;
+        private final Channel<Runnable> processorRunnerChannel;
+        private final SelectControllerSupplier<T> selectControllerSupplier;
 
-        public CaseRunner(ChannelCase<T> channelCase, Channel<Void> doneChannel,
+        public CaseRunner(ChannelCase<T> channelCase, Channel<Runnable> processorRunnerChannel,
                 SelectGroup selectGroup)
         {
             this.channel = channelCase.channel;
             this.processor = channelCase.processor;
-            this.doneChannel = doneChannel;
-            this.selectGroup = selectGroup;
+            this.processorRunnerChannel = processorRunnerChannel;
+            this.selectControllerSupplier = r -> selectGroup.addMember(channel, r);
         }
 
         @Override
         public void run()
         {
-            GetRequest<T> request = channel.getRequest(r -> selectGroup.addMember(channel, r));
-            GetResult<T> result = request.response().result();
-            if (result.containsValue)
-            {
-                processor.accept(result.value);
-                doneChannel.close();
-            }
-            else
-                doneChannel.put(null);
+            GetResult<T> result = channel.get(selectControllerSupplier);
+            processorRunnerChannel
+                    .put(result.containsValue ? () -> processor.accept(result.value) : null);
         }
     }
 }

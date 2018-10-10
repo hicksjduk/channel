@@ -85,19 +85,6 @@ public class Channel<T>
             close();
     }
 
-    /**
-     * Puts the specified value into the channel, as long as it is open. This call blocks until the number of requests
-     * ahead of it in the put queue reduces to less than the channel's buffer size, or the value is used to satisfy a
-     * get request.
-     * 
-     * @return whether the value was put. A value of false means that the channel was closed at the time the request is
-     *         made, or became closed while the request was blocked.
-     */
-    public boolean put(T value)
-    {
-        return putRequest(value).response().result();
-    }
-
     public boolean isOpen()
     {
         return status.get() != Status.CLOSED;
@@ -125,6 +112,19 @@ public class Channel<T>
             }
     }
 
+    /**
+     * Puts the specified value into the channel, as long as it is open. This call blocks until the number of requests
+     * ahead of it in the put queue reduces to less than the channel's buffer size, or the value is used to satisfy a
+     * get request.
+     * 
+     * @return whether the value was put. A value of false means that the channel was closed at the time the request is
+     *         made, or became closed while the request was blocked.
+     */
+    public boolean put(T value)
+    {
+        return putRequest(value).response().result();
+    }
+
     private synchronized PutRequest<T> putRequest(T value)
     {
         PutRequest<T> request = new PutRequest<>(value);
@@ -150,19 +150,15 @@ public class Channel<T>
      */
     public GetResult<T> get()
     {
-        return getRequest(null).response().result();
+        return get(null);
     }
 
-    synchronized GetResult<T> getNonBlocking()
+    GetResult<T> get(SelectControllerSupplier<T> selectControllerSupplier)
     {
-        if (!isOpen())
-            return new GetResult<>();
-        if (putQueue.isEmpty())
-            return null;
-        return get();
+        return getRequest(selectControllerSupplier).response().result();
     }
 
-    synchronized GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
+    private synchronized GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
         GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
         if (!isOpen())
@@ -173,6 +169,15 @@ public class Channel<T>
             processQueues();
         }
         return request;
+    }
+
+    synchronized GetResult<T> getNonBlocking()
+    {
+        if (!isOpen())
+            return new GetResult<>();
+        if (putQueue.isEmpty())
+            return null;
+        return get();
     }
 
     private synchronized void processQueues()
