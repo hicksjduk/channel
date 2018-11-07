@@ -8,7 +8,11 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -21,10 +25,32 @@ import java.util.stream.Stream;
  */
 public class Channel<T>
 {
+    private static <T> T doWithLock(Lock lock, Supplier<T> toDo)
+    {
+        lock.lock();
+        try
+        {
+            return toDo.get();
+        }
+        finally
+        {
+            lock.unlock();
+        }
+    }
+
+    private static void doWithLock(Lock lock, Runnable toDo)
+    {
+        doWithLock(lock, () -> {
+            toDo.run();
+            return true;
+        });
+    }
+
     private final int bufferSize;
     private final AtomicReference<Status> status = new AtomicReference<>(Status.OPEN);
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
     private final LinkedList<PutRequest<T>> putQueue = new LinkedList<>();
+    private final ReadWriteLock lock = new ReentrantReadWriteLock(true);
 
     /**
      * Creates a channel with the default buffer size of 0.
@@ -49,16 +75,16 @@ public class Channel<T>
      */
     public boolean close()
     {
-        Stream.Builder<Request> requests;
-        synchronized (this)
-        {
+        Stream.Builder<Request> requests = Stream.builder();
+        boolean wasOpen = doWithLock(lock.writeLock(), () -> {
             if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
                 return false;
-            requests = Stream.builder();
             Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
-        }
-        requests.build().forEach(Request::setChannelClosed);
-        return true;
+            return true;
+        });
+        if (wasOpen)
+            requests.build().forEach(Request::setChannelClosed);
+        return wasOpen;
     }
 
     private static <V, C extends Collection<? extends V>> Consumer<C> drainer(
@@ -79,10 +105,12 @@ public class Channel<T>
             closeIfEmpty();
     }
 
-    private synchronized void closeIfEmpty()
+    private void closeIfEmpty()
     {
-        if (putQueue.isEmpty())
-            close();
+        doWithLock(lock.writeLock(), () -> {
+            if (putQueue.isEmpty())
+                close();
+        });
     }
 
     public boolean isOpen()
@@ -125,18 +153,20 @@ public class Channel<T>
         return putRequest(value).response().result();
     }
 
-    private synchronized PutRequest<T> putRequest(T value)
+    private PutRequest<T> putRequest(T value)
     {
         PutRequest<T> request = new PutRequest<>(value);
-        if (!isOpen())
-            request.setChannelClosed();
-        else
-        {
-            if (putQueue.size() < bufferSize)
-                request.setCompleted();
-            putQueue.offer(request);
-            processQueues();
-        }
+        doWithLock(lock.writeLock(), () -> {
+            if (!isOpen())
+                request.setChannelClosed();
+            else
+            {
+                if (putQueue.size() < bufferSize)
+                    request.setCompleted();
+                putQueue.offer(request);
+                processQueues();
+            }
+        });
         return request;
     }
 
@@ -158,29 +188,33 @@ public class Channel<T>
         return getRequest(selectControllerSupplier).response().result();
     }
 
-    private synchronized GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
+    private GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
         GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
-        if (!isOpen())
-            request.setChannelClosed();
-        else
-        {
-            getQueue.offer(request);
-            processQueues();
-        }
+        doWithLock(lock.writeLock(), () -> {
+            if (!isOpen())
+                request.setChannelClosed();
+            else
+            {
+                getQueue.offer(request);
+                processQueues();
+            }
+        });
         return request;
     }
 
-    synchronized GetResult<T> getNonBlocking()
+    GetResult<T> getNonBlocking()
     {
-        if (!isOpen())
-            return new GetResult<>();
-        if (putQueue.isEmpty())
-            return null;
-        return get();
+        return doWithLock(lock.readLock(), () -> {
+            if (!isOpen())
+                return new GetResult<>();
+            if (putQueue.isEmpty())
+                return null;
+            return get();
+        });
     }
 
-    private synchronized void processQueues()
+    private void processQueues()
     {
         while (!getQueue.isEmpty() && !putQueue.isEmpty())
         {
@@ -200,10 +234,9 @@ public class Channel<T>
     {
         if (request.isComplete())
             return;
-        synchronized (this)
-        {
+        doWithLock(lock.writeLock(), () -> {
             getQueue.remove(request);
-        }
+        });
         request.setNoValue();
     }
 
