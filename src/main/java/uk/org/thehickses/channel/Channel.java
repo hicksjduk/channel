@@ -9,8 +9,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -50,7 +49,7 @@ public class Channel<T>
     private final AtomicReference<Status> status = new AtomicReference<>(Status.OPEN);
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
     private final LinkedList<PutRequest<T>> putQueue = new LinkedList<>();
-    private final ReadWriteLock lock = new ReentrantReadWriteLock(true);
+    private final Lock lock = new ReentrantLock();
 
     /**
      * Creates a channel with the default buffer size of 0.
@@ -75,14 +74,16 @@ public class Channel<T>
      */
     public boolean close()
     {
-        if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
-            return false;
         Stream.Builder<Request> requests = Stream.builder();
-        doWithLock(lock.writeLock(), () -> {
+        boolean wasOpen = doWithLock(lock, () -> {
+            if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
+                return false;
             Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
+            return true;
         });
-        requests.build().forEach(Request::setChannelClosed);
-        return true;
+        if (wasOpen)
+            requests.build().forEach(Request::setChannelClosed);
+        return wasOpen;
     }
 
     private static <V, C extends Collection<? extends V>> Consumer<C> drainer(
@@ -105,7 +106,7 @@ public class Channel<T>
 
     private void closeIfEmpty()
     {
-        doWithLock(lock.writeLock(), () -> {
+        doWithLock(lock, () -> {
             if (putQueue.isEmpty())
                 close();
         });
@@ -154,21 +155,23 @@ public class Channel<T>
     private PutRequest<T> putRequest(T value)
     {
         PutRequest<T> request = new PutRequest<>(value);
-        if (!isOpen())
-            request.setChannelClosed();
-        else
-            doWithLock(lock.writeLock(), () -> {
+        doWithLock(lock, () -> {
+            if (!isOpen())
+                request.setChannelClosed();
+            else
+            {
                 if (putQueue.size() < bufferSize)
                     request.setCompleted();
                 putQueue.offer(request);
                 processQueues();
-            });
+            }
+        });
         return request;
     }
 
     /**
-     * Gets and removes a value from the channel. If the channel contains no values, this call blocks until a value
-     * becomes available.
+     * Gets and removes a value from the channel. If no value is available to satisfy the request, this call blocks
+     * until a value becomes available.
      * 
      * @return the result. If the channel was closed, either at the time of the call or while the request was blocked,
      *         {@link GetResult#containsValue} is false; otherwise {@link GetResult#containsValue} is true and
@@ -187,19 +190,21 @@ public class Channel<T>
     private GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
         GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
-        if (!isOpen())
-            request.setChannelClosed();
-        else
-            doWithLock(lock.writeLock(), () -> {
+        doWithLock(lock, () -> {
+            if (!isOpen())
+                request.setChannelClosed();
+            else
+            {
                 getQueue.offer(request);
                 processQueues();
-            });
+            }
+        });
         return request;
     }
 
     GetResult<T> getNonBlocking()
     {
-        return doWithLock(lock.readLock(), () -> {
+        return doWithLock(lock, () -> {
             if (!isOpen())
                 return new GetResult<>();
             if (putQueue.isEmpty())
@@ -228,7 +233,7 @@ public class Channel<T>
     {
         if (request.isComplete())
             return;
-        doWithLock(lock.writeLock(), () -> {
+        doWithLock(lock, () -> {
             getQueue.remove(request);
         });
         request.setNoValue();
