@@ -75,16 +75,14 @@ public class Channel<T>
      */
     public boolean close()
     {
+        if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
+            return false;
         Stream.Builder<Request> requests = Stream.builder();
-        boolean wasOpen = doWithLock(lock.writeLock(), () -> {
-            if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
-                return false;
+        doWithLock(lock.writeLock(), () -> {
             Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
-            return true;
         });
-        if (wasOpen)
-            requests.build().forEach(Request::setChannelClosed);
-        return wasOpen;
+        requests.build().forEach(Request::setChannelClosed);
+        return true;
     }
 
     private static <V, C extends Collection<? extends V>> Consumer<C> drainer(
@@ -156,17 +154,15 @@ public class Channel<T>
     private PutRequest<T> putRequest(T value)
     {
         PutRequest<T> request = new PutRequest<>(value);
-        doWithLock(lock.writeLock(), () -> {
-            if (!isOpen())
-                request.setChannelClosed();
-            else
-            {
+        if (!isOpen())
+            request.setChannelClosed();
+        else
+            doWithLock(lock.writeLock(), () -> {
                 if (putQueue.size() < bufferSize)
                     request.setCompleted();
                 putQueue.offer(request);
                 processQueues();
-            }
-        });
+            });
         return request;
     }
 
@@ -191,15 +187,13 @@ public class Channel<T>
     private GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
         GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
-        doWithLock(lock.writeLock(), () -> {
-            if (!isOpen())
-                request.setChannelClosed();
-            else
-            {
+        if (!isOpen())
+            request.setChannelClosed();
+        else
+            doWithLock(lock.writeLock(), () -> {
                 getQueue.offer(request);
                 processQueues();
-            }
-        });
+            });
         return request;
     }
 
