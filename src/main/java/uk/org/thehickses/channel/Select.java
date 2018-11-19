@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -120,18 +121,17 @@ public class Select
         @Override
         public boolean run()
         {
-            boolean allClosed = true;
-            for (ChannelCase<?> c : cases)
-            {
-                CaseResult result = c.runSync();
-                if (result == CaseResult.VALUE_READ)
-                    return true;
-                if (result != CaseResult.CHANNEL_CLOSED)
-                    allClosed = false;
-            }
-            if (!allClosed)
-                defaultProcessor.run();
-            return !allClosed;
+            AtomicBoolean allClosed = new AtomicBoolean(true);
+            if (cases
+                    .stream()
+                    .map(ChannelCase::runSync)
+                    .peek(res -> allClosed.compareAndSet(true, res == CaseResult.CHANNEL_CLOSED))
+                    .anyMatch(res -> res == CaseResult.VALUE_READ))
+                return true;
+            if (allClosed.get())
+                return false;
+            defaultProcessor.run();
+            return true;
         }
     }
 

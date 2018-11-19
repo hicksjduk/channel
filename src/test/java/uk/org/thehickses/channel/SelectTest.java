@@ -14,12 +14,12 @@ import uk.org.thehickses.channel.Select.Selecter;
 @SuppressWarnings("unchecked")
 public class SelectTest
 {
-    private final Channel<Integer> ch1 = new Channel<>();
-    private final Channel<Boolean> ch2 = new Channel<>();
-    private final Channel<String> ch3 = new Channel<>();
-    private final Consumer<Integer> m1 = mock(Consumer.class);
-    private final Consumer<Boolean> m2 = mock(Consumer.class);
-    private final Consumer<String> m3 = mock(Consumer.class);
+    private Channel<Integer> ch1 = new Channel<>();
+    private Channel<Boolean> ch2 = new Channel<>();
+    private Channel<String> ch3 = new Channel<>();
+    private Consumer<Integer> m1 = mock(Consumer.class);
+    private Consumer<Boolean> m2 = mock(Consumer.class);
+    private Consumer<String> m3 = mock(Consumer.class);
 
     @After
     public void tearDown()
@@ -95,7 +95,9 @@ public class SelectTest
     public void testWithDefault()
     {
         Runnable m4 = mock(Runnable.class);
-        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run()).isTrue();
+        assertThat(
+                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
+                        .isTrue();
         verify(m4).run();
         verifyNoMoreInteractions(m4);
     }
@@ -108,11 +110,40 @@ public class SelectTest
     }
 
     @Test
+    public void testWithDefaultAndTwoPuts()
+    {
+        ch2 = new Channel<>(1);
+        ch3 = new Channel<>(1);
+        ch2.put(false);
+        ch3.put("Hello");
+        Runnable m4 = mock(Runnable.class);
+        assertThat(
+                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
+                        .isTrue();
+        verify(m2).accept(false);
+        verifyNoMoreInteractions(m4);
+    }
+
+    @Test
     public void testAllClosedWithDefault()
     {
         Runnable m4 = mock(Runnable.class);
         Stream.of(ch1, ch2, ch3).forEach(Channel::close);
-        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run()).isFalse();
+        assertThat(
+                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
+                        .isFalse();
+        verifyNoMoreInteractions(m4);
+    }
+
+    @Test
+    public void testAllButOneClosedWithDefault()
+    {
+        Runnable m4 = mock(Runnable.class);
+        Stream.of(ch1, ch3).forEach(Channel::close);
+        assertThat(
+                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
+                        .isTrue();
+        verify(m4).run();
         verifyNoMoreInteractions(m4);
     }
 }
