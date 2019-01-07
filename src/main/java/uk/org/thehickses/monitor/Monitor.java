@@ -1,5 +1,6 @@
 package uk.org.thehickses.monitor;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -93,10 +94,8 @@ public class Monitor implements Executor
         }
         while (!processIds.isEmpty())
         {
-            LOG.debug("Waiting for process(es) [{}] to terminate", processIds
-                    .stream()
-                    .map(Monitor::formatProcessId)
-                    .collect(Collectors.joining(", ")));
+            LOG.debug("Waiting for process(es) {} to terminate",
+                    Arrays.toString(processIds.stream().map(Monitor::formatProcessId).toArray()));
             processIds.remove(ch.get().value);
         }
         LOG.debug("All processes terminated");
