@@ -21,6 +21,12 @@
 			<groupId>uk.org.thehickses</groupId>
 			<artifactId>listeners</artifactId>
 			<version>0.1</version>
+			<exclusions>
+				<exclusion>
+					<groupId>uk.org.thehickses</groupId>
+					<artifactId>channel</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>uk.org.thehickses</groupId>
