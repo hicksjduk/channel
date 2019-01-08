@@ -5,7 +5,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,10 +46,10 @@ public class Monitor implements Executor
 
     private int processStarting()
     {
-        int processId;
+        int processId = processIdGenerator.allocateId();
         synchronized (activeProcessIds)
         {
-            activeProcessIds.add(processId = processIdGenerator.allocateId());
+            activeProcessIds.add(processId);
         }
         return processId;
     }
@@ -88,6 +87,8 @@ public class Monitor implements Executor
         Listener<Integer> listener;
         synchronized (activeProcessIds)
         {
+            if (activeProcessIds.isEmpty())
+                return;
             processIds = new HashSet<>(activeProcessIds);
             ch = new Channel<>(processIds.size());
             listeners.addOrUpdateListener(listener = ch::put, processIds::contains);
