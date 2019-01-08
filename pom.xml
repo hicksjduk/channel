@@ -23,8 +23,8 @@
 			<version>0.1</version>
 			<exclusions>
 				<exclusion>
-					<groupId>uk.org.thehickses</groupId>
-					<artifactId>channel</artifactId>
+					<groupId>${groupId}</groupId>
+					<artifactId>${artifactId}</artifactId>
 				</exclusion>
 			</exclusions>
 		</dependency>
