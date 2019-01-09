@@ -17,20 +17,21 @@ public class MonitorTest
     public void test()
     {
         int threadCount = 100;
+        int halfThreadCount = threadCount / 2;
         Monitor monitor = new Monitor();
         Channel<Void>[] channels = IntStream
                 .range(0, threadCount)
                 .mapToObj(i -> new Channel<Void>())
                 .toArray(Channel[]::new);
-        Arrays.stream(channels, 0, threadCount / 2).forEach(ch -> runProcess(monitor, ch));
+        Arrays.stream(channels, 0, halfThreadCount).forEach(ch -> runProcess(monitor, ch));
         Channel<Void> doneChannel1 = startWait(monitor);
-        Arrays.stream(channels, threadCount / 2, threadCount).forEach(ch -> runProcess(monitor, ch));
+        Arrays.stream(channels, halfThreadCount, threadCount).forEach(ch -> runProcess(monitor, ch));
         Channel<Void> doneChannel2 = startWait(monitor);
-        Arrays.stream(channels, 0, threadCount / 2).forEach(Channel::close);
+        Arrays.stream(channels, 0, halfThreadCount).forEach(Channel::close);
         doneChannel1.get();
         assertThat(doneChannel2.isOpen());
         Channel<Void> doneChannel3 = startWait(monitor);
-        Arrays.stream(channels, threadCount / 2, threadCount).forEach(Channel::close);
+        Arrays.stream(channels, halfThreadCount, threadCount).forEach(Channel::close);
         doneChannel2.get();
         doneChannel3.get();
     }
