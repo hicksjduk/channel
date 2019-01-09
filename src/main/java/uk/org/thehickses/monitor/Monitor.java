@@ -21,7 +21,7 @@ public class Monitor implements Executor
     private final IdGenerator processIdGenerator = new IdGenerator(0, Integer.MAX_VALUE);
     private final BiConsumer<Runnable, Integer> executor;
     private final Set<Integer> activeProcessIds = new HashSet<>();
-    private final Listeners<Listener<Integer>, Integer> listeners = Listeners.newInstance(5);
+    private final Listeners<Listener<Integer>, Integer> listeners = Listeners.newInstance();
 
     public Monitor()
     {
@@ -65,19 +65,19 @@ public class Monitor implements Executor
             {
                 LOG.error("Unexpected error", ex);
             }
-            processEnded(processId);
             LOG.debug("Monitored process finished");
+            processEnded(processId);
         };
     }
 
     private void processEnded(int processId)
     {
-        listeners.fire(processId);
         synchronized (activeProcessIds)
         {
             activeProcessIds.remove(processId);
         }
         processIdGenerator.freeId(processId);
+        listeners.fire(processId);
     }
 
     public void waitForActiveProcesses()
@@ -93,13 +93,14 @@ public class Monitor implements Executor
             ch = new Channel<>(processIds.size());
             listeners.addOrUpdateListener(listener = ch::put, processIds::contains);
         }
+        int processCount = processIds.size();
         while (!processIds.isEmpty())
         {
             LOG.debug("Waiting for process(es) {} to terminate",
                     Arrays.toString(processIds.stream().map(Monitor::formatProcessId).toArray()));
             processIds.remove(ch.get().value);
         }
-        LOG.debug("All processes terminated");
+        LOG.debug("All {} process(es) terminated", processCount);
         listeners.removeListener(listener);
     }
 
