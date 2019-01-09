@@ -18,7 +18,7 @@ public class Monitor implements Executor
 {
     private final static Logger LOG = LoggerFactory.getLogger(Monitor.class);
 
-    private final IdGenerator processIdGenerator = new IdGenerator(0, 100);
+    private final IdGenerator processIdGenerator = new IdGenerator(0, Integer.MAX_VALUE);
     private final BiConsumer<Runnable, Integer> executor;
     private final Set<Integer> activeProcessIds = new HashSet<>();
     private final Listeners<Listener<Integer>, Integer> listeners = Listeners.newInstance(5);
