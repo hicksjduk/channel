@@ -18,7 +18,7 @@ public class Monitor implements Executor
 {
     private final static Logger LOG = LoggerFactory.getLogger(Monitor.class);
 
-    private final IdGenerator processIdGenerator = new IdGenerator(0, Integer.MAX_VALUE);
+    private final IdGenerator processIdGenerator = new IdGenerator(0, 100);
     private final BiConsumer<Runnable, Integer> executor;
     private final Set<Integer> activeProcessIds = new HashSet<>();
     private final Listeners<Listener<Integer>, Integer> listeners = Listeners.newInstance(5);
@@ -40,8 +40,7 @@ public class Monitor implements Executor
     private void runMonitored(Runnable process)
     {
         int processId = processStarting();
-        executor.accept(wrappedProcess(process), processId);
-        processEnded(processId);
+        executor.accept(wrappedProcess(process, processId), processId);
     }
 
     private int processStarting()
@@ -54,7 +53,7 @@ public class Monitor implements Executor
         return processId;
     }
 
-    private Runnable wrappedProcess(Runnable process)
+    private Runnable wrappedProcess(Runnable process, int processId)
     {
         return () -> {
             LOG.debug("Monitored process starting");
@@ -66,6 +65,7 @@ public class Monitor implements Executor
             {
                 LOG.error("Unexpected error", ex);
             }
+            processEnded(processId);
             LOG.debug("Monitored process finished");
         };
     }
