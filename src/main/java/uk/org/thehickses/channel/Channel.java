@@ -1,5 +1,7 @@
 package uk.org.thehickses.channel;
 
+import static uk.org.thehickses.locking.Locking.*;
+
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
@@ -11,7 +13,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -24,27 +25,6 @@ import java.util.stream.Stream;
  */
 public class Channel<T>
 {
-    private static <T> T doWithLock(Lock lock, Supplier<T> toDo)
-    {
-        lock.lock();
-        try
-        {
-            return toDo.get();
-        }
-        finally
-        {
-            lock.unlock();
-        }
-    }
-
-    private static void doWithLock(Lock lock, Runnable toDo)
-    {
-        doWithLock(lock, () -> {
-            toDo.run();
-            return true;
-        });
-    }
-
     private final int bufferSize;
     private final AtomicReference<Status> status = new AtomicReference<>(Status.OPEN);
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
