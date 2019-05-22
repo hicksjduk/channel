@@ -1,21 +1,20 @@
-package uk.org.thehickses.channel;
+package uk.org.thehickses.channel.internal;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicReference;
 
-import uk.org.thehickses.channel.Channel.GetRequest;
-
-class SelectGroup implements SelectController
+public class SelectGroup implements SelectController
 {
     private final List<GroupMember<?>> members = new ArrayList<>();
     private final AtomicReference<GetRequest<?>> selected = new AtomicReference<>();
 
-    public <T> SelectGroup addMember(Channel<T> channel, GetRequest<T> request)
+    public <T> SelectGroup addMember(ChannelPrivateAccessor<T> privateAccessor, GetRequest<T> request)
     {
         synchronized (members)
         {
-            members.add(new GroupMember<>(channel, request));
+            members.add(new GroupMember<>(privateAccessor, request));
         }
         return this;
     }
@@ -25,7 +24,7 @@ class SelectGroup implements SelectController
     {
         if (!selected.compareAndSet(null, req))
             return false;
-        new Thread(() -> cancelAllExcept(req)).start();
+        ForkJoinPool.commonPool().execute(() -> cancelAllExcept(req));
         return true;
     }
 
@@ -39,23 +38,6 @@ class SelectGroup implements SelectController
         synchronized (members)
         {
             members.stream().filter(m -> m.request != req).forEach(GroupMember::cancel);
-        }
-    }
-
-    private static class GroupMember<T>
-    {
-        public final Channel<T> channel;
-        public final GetRequest<T> request;
-
-        public GroupMember(Channel<T> channel, GetRequest<T> request)
-        {
-            this.channel = channel;
-            this.request = request;
-        }
-
-        public void cancel()
-        {
-            channel.cancel(request);
         }
     }
 }

@@ -3,13 +3,12 @@ package uk.org.thehickses.channel;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import org.junit.After;
 import org.junit.Test;
-
-import uk.org.thehickses.channel.Select.Selecter;
 
 @SuppressWarnings("unchecked")
 public class SelectTest
@@ -47,7 +46,7 @@ public class SelectTest
 
     private <T> void testWithSinglePut(Channel<T> channel, Consumer<T> receiver, T value)
     {
-        new Thread(() -> channel.put(value)).start();
+        runAsync(() -> channel.put(value));
         assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
         verify(receiver).accept(value);
     }
@@ -55,12 +54,12 @@ public class SelectTest
     @Test
     public void testWithMultiplePut()
     {
-        new Thread(() -> {
+        runAsync(() -> {
             ch3.put("Bonjour");
             ch1.put(981);
             ch2.put(false);
             ch3.put("Hej");
-        }).start();
+        });
         assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
         verify(m3).accept("Bonjour");
         assertThat(ch1.get().value).isEqualTo(981);
@@ -72,13 +71,13 @@ public class SelectTest
     public void testWithMultiplePutAndGet()
     {
         Channel<Integer> valueCount = new Channel<>(1);
-        new Thread(() -> {
+        runAsync(() -> {
             valueCount.put(4);
             ch3.put("Bonjour");
             ch1.put(981);
             ch2.put(false);
             ch3.put("Hej");
-        }).start();
+        });
         Selecter select = Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3);
         for (int count = valueCount.get().value; count > 0; count += valueCount.get().value)
         {
@@ -145,5 +144,10 @@ public class SelectTest
                         .isTrue();
         verify(m4).run();
         verifyNoMoreInteractions(m4);
+    }
+
+    private void runAsync(Runnable r)
+    {
+        ForkJoinPool.commonPool().execute(r);
     }
 }
