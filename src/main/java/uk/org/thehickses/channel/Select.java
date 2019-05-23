@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
@@ -166,7 +167,7 @@ public class Select
                 SelectGroup selectGroup)
         {
             CaseRunner<T> cr = new CaseRunner<>(this, processorRunnerChannel, selectGroup);
-            new Thread(cr).start();
+            ForkJoinPool.commonPool().execute(cr);
             return cr;
         }
     }

@@ -2,6 +2,7 @@ package uk.org.thehickses.channel;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicReference;
 
 import uk.org.thehickses.channel.Channel.GetRequest;
@@ -25,7 +26,7 @@ class SelectGroup implements SelectController
     {
         if (!selected.compareAndSet(null, req))
             return false;
-        new Thread(() -> cancelAllExcept(req)).start();
+        ForkJoinPool.commonPool().execute(() -> cancelAllExcept(req));
         return true;
     }
 

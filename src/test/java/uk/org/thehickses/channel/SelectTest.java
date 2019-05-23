@@ -3,6 +3,7 @@ package uk.org.thehickses.channel;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -47,7 +48,7 @@ public class SelectTest
 
     private <T> void testWithSinglePut(Channel<T> channel, Consumer<T> receiver, T value)
     {
-        new Thread(() -> channel.put(value)).start();
+        ForkJoinPool.commonPool().execute(() -> channel.put(value));
         assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
         verify(receiver).accept(value);
     }

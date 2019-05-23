@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -46,7 +47,7 @@ public class ChannelTest
                 putsAndGets.put(count);
                 putCount.addAndGet(count);
             };
-            new Thread(putter).start();
+            ForkJoinPool.commonPool().execute(putter);
         }
         List<Integer> values = new ArrayList<Integer>();
         Runnable reader = () -> {
@@ -55,7 +56,7 @@ public class ChannelTest
                 putsAndGets.put(-1);
             });
         };
-        new Thread(reader).start();
+        ForkJoinPool.commonPool().execute(reader);
         int outstandingValueCount = Integer.MIN_VALUE;
         while (outstandingValueCount != 0)
         {
@@ -141,7 +142,7 @@ public class ChannelTest
                 throw new RuntimeException(ex);
             }
         };
-        new Thread(closer).start();
+        ForkJoinPool.commonPool().execute(closer);
         try
         {
             assertThat(putter.apply(ch)).isEqualTo(expectedResult);
