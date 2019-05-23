@@ -5,8 +5,6 @@ import static org.assertj.core.api.Assertions.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,15 +28,15 @@ public class ChannelTest
 
     public void testChannel(int supplierThreads)
     {
-        Channel<Integer> channel = new Channel<>();
-        Channel<Integer> putsAndGets = new Channel<>(supplierThreads + 1);
-        AtomicInteger putCount = new AtomicInteger();
-        int valueCount = 2000;
-        for (int i = 0; i < supplierThreads; i++)
+        var channel = new Channel<Integer>();
+        var putsAndGets = new Channel<Integer>(supplierThreads + 1);
+        var putCount = new AtomicInteger();
+        var valueCount = 2000;
+        for (var i = 0; i < supplierThreads; i++)
         {
-            int t = i;
+            var t = i;
             Runnable putter = () -> {
-                int count = 0;
+                var count = 0;
                 for (int v = t; v < valueCount; v += supplierThreads)
                 {
                     channel.put(v);
@@ -49,7 +47,7 @@ public class ChannelTest
             };
             ForkJoinPool.commonPool().execute(putter);
         }
-        List<Integer> values = new ArrayList<Integer>();
+        var values = new ArrayList<Integer>();
         Runnable reader = () -> {
             channel.range(v -> {
                 values.add(v);
@@ -57,10 +55,10 @@ public class ChannelTest
             });
         };
         ForkJoinPool.commonPool().execute(reader);
-        int outstandingValueCount = Integer.MIN_VALUE;
+        var outstandingValueCount = Integer.MIN_VALUE;
         while (outstandingValueCount != 0)
         {
-            GetResult<Integer> result = putsAndGets.get();
+            var result = putsAndGets.get();
             if (outstandingValueCount == Integer.MIN_VALUE)
                 outstandingValueCount = result.value;
             else
@@ -88,19 +86,19 @@ public class ChannelTest
 
     public void testCloseWhenEmpty(int valueCount)
     {
-        Channel<Integer> ch = new Channel<>(valueCount);
-        for (int i = 0; i < valueCount; i++)
+        var ch = new Channel<Integer>(valueCount);
+        for (var i = 0; i < valueCount; i++)
             ch.put(i);
         ch.closeWhenEmpty();
-        Set<Integer> values = new HashSet<>(valueCount);
+        var values = new HashSet<>(valueCount);
         ch.range(values::add);
         assertThat(values.size()).isEqualTo(valueCount);
     }
-    
+
     @Test
     public void testDoubleClose()
     {
-        Channel<Void> ch = new Channel<>();
+        var ch = new Channel<Void>();
         assertThat(ch.close()).isTrue();
         assertThat(ch.close()).isFalse();
     }
@@ -108,7 +106,7 @@ public class ChannelTest
     @Test
     public void testCloseBeforePut()
     {
-        Channel<Integer> ch = new Channel<>();
+        var ch = new Channel<Integer>();
         ch.close();
         assertThat(ch.put(1)).isFalse();
     }
@@ -128,8 +126,8 @@ public class ChannelTest
     private void testCloseAfterPut(int bufferSize, Function<Channel<Integer>, Boolean> putter,
             boolean expectedResult)
     {
-        Channel<Integer> ch = new Channel<>(bufferSize);
-        Channel<Void> done = new Channel<>(1);
+        var ch = new Channel<Integer>(bufferSize);
+        var done = new Channel<Void>(1);
         Runnable closer = () -> {
             try
             {

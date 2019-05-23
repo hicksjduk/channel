@@ -1,6 +1,4 @@
-package uk.org.thehickses.channel;
-
-import uk.org.thehickses.channel.Channel.GetRequest;
+package uk.org.thehickses.channel.internal;
 
 @FunctionalInterface
 public interface SelectController

@@ -7,13 +7,19 @@ import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+
+import uk.org.thehickses.channel.internal.GetRequest;
+import uk.org.thehickses.channel.internal.GetResult;
+import uk.org.thehickses.channel.internal.ChannelPrivateAccessor;
+import uk.org.thehickses.channel.internal.PutRequest;
+import uk.org.thehickses.channel.internal.Request;
+import uk.org.thehickses.channel.internal.SelectControllerSupplier;
+import uk.org.thehickses.channel.internal.Status;
 
 /**
  * A class that emulates a channel in the Go language.
@@ -54,8 +60,8 @@ public class Channel<T>
      */
     public boolean close()
     {
-        Stream.Builder<Request> requests = Stream.builder();
-        boolean wasOpen = doWithLock(lock, () -> {
+        var requests = Stream.<Request> builder();
+        var wasOpen = doWithLock(lock, () -> {
             if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
                 return false;
             Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
@@ -134,7 +140,7 @@ public class Channel<T>
 
     private PutRequest<T> putRequest(T value)
     {
-        PutRequest<T> request = new PutRequest<>(value);
+        var request = new PutRequest<>(value);
         doWithLock(lock, () -> {
             if (!isOpen())
                 request.setChannelClosed();
@@ -162,14 +168,14 @@ public class Channel<T>
         return get(null);
     }
 
-    GetResult<T> get(SelectControllerSupplier<T> selectControllerSupplier)
+    private GetResult<T> get(SelectControllerSupplier<T> selectControllerSupplier)
     {
         return getRequest(selectControllerSupplier).response().result();
     }
 
     private GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
-        GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
+        var request = new GetRequest<>(selectControllerSupplier);
         doWithLock(lock, () -> {
             if (!isOpen())
                 request.setChannelClosed();
@@ -182,7 +188,32 @@ public class Channel<T>
         return request;
     }
 
-    GetResult<T> getNonBlocking()
+    ChannelPrivateAccessor<T> privateAccessor()
+    {
+        var channel = this;
+        return new ChannelPrivateAccessor<T>()
+        {
+            @Override
+            public GetResult<T> getNonBlocking()
+            {
+                return channel.getNonBlocking();
+            }
+
+            @Override
+            public GetResult<T> get(SelectControllerSupplier<T> selectControllerSupplier)
+            {
+                return channel.get(selectControllerSupplier);
+            }
+
+            @Override
+            public void cancel(GetRequest<T> request)
+            {
+                channel.cancel(request);
+            }
+        };
+    }
+
+    private GetResult<T> getNonBlocking()
     {
         return doWithLock(lock, () -> {
             if (!isOpen())
@@ -197,19 +228,19 @@ public class Channel<T>
     {
         while (!getQueue.isEmpty() && !putQueue.isEmpty())
         {
-            GetRequest<T> getRequest = getQueue.pop();
+            var getRequest = getQueue.pop();
             if (!getRequest.isSelectable())
                 continue;
             if (putQueue.size() > bufferSize)
                 putQueue.get(bufferSize).setCompleted();
-            PutRequest<T> putRequest = putQueue.pop();
+            var putRequest = putQueue.pop();
             getRequest.setReturnedValue(putRequest.value);
         }
         if (status.get() == Status.CLOSE_WHEN_EMPTY)
             closeIfEmpty();
     }
 
-    void cancel(GetRequest<T> request)
+    private void cancel(GetRequest<T> request)
     {
         if (request.isComplete())
             return;
@@ -217,125 +248,5 @@ public class Channel<T>
             getQueue.remove(request);
         });
         request.setNoValue();
-    }
-
-    private static interface Request
-    {
-        void setChannelClosed();
-    }
-
-    @FunctionalInterface
-    static interface GetResponse<T>
-    {
-        GetResult<T> result();
-    }
-
-    @FunctionalInterface
-    private static interface PutResponse
-    {
-        boolean result();
-    }
-
-    static class GetRequest<T> implements Request
-    {
-        private final CompletableFuture<GetResponse<T>> responder = new CompletableFuture<>();
-        private final SelectController selectController;
-
-        public GetRequest(SelectControllerSupplier<T> supplier)
-        {
-            this.selectController = supplier == null ? r -> true : supplier.apply(this);
-        }
-
-        @Override
-        public void setChannelClosed()
-        {
-            setNoValue();
-        }
-
-        public void setNoValue()
-        {
-            responder.complete(() -> new GetResult<>());
-        }
-
-        public void setReturnedValue(T value)
-        {
-            responder.complete(() -> new GetResult<>(value));
-        }
-
-        public boolean isSelectable()
-        {
-            return selectController.select(this);
-        }
-
-        public boolean isComplete()
-        {
-            return responder.isDone();
-        }
-
-        public GetResponse<T> response()
-        {
-            while (true)
-                try
-                {
-                    return responder.get();
-                }
-                catch (InterruptedException e)
-                {
-                    continue;
-                }
-                catch (ExecutionException e)
-                {
-                    throw new RuntimeException(e);
-                }
-        }
-    }
-
-    private static class PutRequest<T> implements Request
-    {
-        public final T value;
-        private final CompletableFuture<PutResponse> responder = new CompletableFuture<>();
-
-        public PutRequest(T value)
-        {
-            this.value = value;
-        }
-
-        @Override
-        public void setChannelClosed()
-        {
-            responder.complete(() -> false);
-        }
-
-        public void setCompleted()
-        {
-            responder.complete(() -> true);
-        }
-
-        public PutResponse response()
-        {
-            while (true)
-                try
-                {
-                    return responder.get();
-                }
-                catch (InterruptedException e)
-                {
-                    continue;
-                }
-                catch (ExecutionException e)
-                {
-                    throw new RuntimeException(e);
-                }
-        }
-    }
-
-    @SuppressWarnings("serial")
-    public static class RangeBreakException extends RuntimeException
-    {
-    }
-
-    private static enum Status
-    {
-        OPEN, CLOSED, CLOSE_WHEN_EMPTY
     }
 }

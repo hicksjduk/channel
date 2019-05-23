@@ -1,4 +1,4 @@
-package uk.org.thehickses.channel;
+package uk.org.thehickses.channel.internal;
 
 public class GetResult<T>
 {
