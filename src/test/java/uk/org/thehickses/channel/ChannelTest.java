@@ -14,11 +14,6 @@ import org.junit.Test;
 
 public class ChannelTest
 {
-    private void runAsync(Runnable r)
-    {
-        ForkJoinPool.commonPool().execute(r);
-    }
-
     @Test
     public void testSingleSupplier()
     {
@@ -50,7 +45,7 @@ public class ChannelTest
                 putsAndGets.put(count);
                 putCount.addAndGet(count);
             };
-            runAsync(putter);
+            ForkJoinPool.commonPool().execute(putter);
         }
         var values = new ArrayList<Integer>();
         Runnable reader = () -> {
@@ -59,7 +54,7 @@ public class ChannelTest
                 putsAndGets.put(-1);
             });
         };
-        runAsync(reader);
+        ForkJoinPool.commonPool().execute(reader);
         var outstandingValueCount = Integer.MIN_VALUE;
         while (outstandingValueCount != 0)
         {
@@ -145,7 +140,7 @@ public class ChannelTest
                 throw new RuntimeException(ex);
             }
         };
-        runAsync(closer);
+        ForkJoinPool.commonPool().execute(closer);
         try
         {
             assertThat(putter.apply(ch)).isEqualTo(expectedResult);

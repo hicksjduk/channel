@@ -46,7 +46,7 @@ public class SelectTest
 
     private <T> void testWithSinglePut(Channel<T> channel, Consumer<T> receiver, T value)
     {
-        runAsync(() -> channel.put(value));
+        ForkJoinPool.commonPool().execute(() -> channel.put(value));
         assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
         verify(receiver).accept(value);
     }
@@ -54,7 +54,7 @@ public class SelectTest
     @Test
     public void testWithMultiplePut()
     {
-        runAsync(() -> {
+        ForkJoinPool.commonPool().execute(() -> {
             ch3.put("Bonjour");
             ch1.put(981);
             ch2.put(false);
@@ -71,7 +71,7 @@ public class SelectTest
     public void testWithMultiplePutAndGet()
     {
         var valueCount = new Channel<Integer>(1);
-        runAsync(() -> {
+        ForkJoinPool.commonPool().execute(() -> {
             valueCount.put(4);
             ch3.put("Bonjour");
             ch1.put(981);
@@ -144,10 +144,5 @@ public class SelectTest
                         .isTrue();
         verify(m4).run();
         verifyNoMoreInteractions(m4);
-    }
-
-    private void runAsync(Runnable r)
-    {
-        ForkJoinPool.commonPool().execute(r);
     }
 }
