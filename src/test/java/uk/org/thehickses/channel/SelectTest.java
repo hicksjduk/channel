@@ -70,7 +70,7 @@ public class SelectTest
     @Test
     public void testWithMultiplePutAndGet()
     {
-        Channel<Integer> valueCount = new Channel<>(1);
+        var valueCount = new Channel<Integer>(1);
         runAsync(() -> {
             valueCount.put(4);
             ch3.put("Bonjour");
@@ -78,7 +78,7 @@ public class SelectTest
             ch2.put(false);
             ch3.put("Hej");
         });
-        Selecter select = Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3);
+        var select = Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3);
         for (int count = valueCount.get().value; count > 0; count += valueCount.get().value)
         {
             assertThat(select.run()).isTrue();
@@ -93,7 +93,7 @@ public class SelectTest
     @Test
     public void testWithDefault()
     {
-        Runnable m4 = mock(Runnable.class);
+        var m4 = mock(Runnable.class);
         assertThat(
                 Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
                         .isTrue();
@@ -115,7 +115,7 @@ public class SelectTest
         ch3 = new Channel<>(1);
         ch2.put(false);
         ch3.put("Hello");
-        Runnable m4 = mock(Runnable.class);
+        var m4 = mock(Runnable.class);
         assertThat(
                 Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
                         .isTrue();
@@ -126,7 +126,7 @@ public class SelectTest
     @Test
     public void testAllClosedWithDefault()
     {
-        Runnable m4 = mock(Runnable.class);
+        var m4 = mock(Runnable.class);
         Stream.of(ch1, ch2, ch3).forEach(Channel::close);
         assertThat(
                 Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
@@ -137,7 +137,7 @@ public class SelectTest
     @Test
     public void testAllButOneClosedWithDefault()
     {
-        Runnable m4 = mock(Runnable.class);
+        var m4 = mock(Runnable.class);
         Stream.of(ch1, ch3).forEach(Channel::close);
         assertThat(
                 Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())

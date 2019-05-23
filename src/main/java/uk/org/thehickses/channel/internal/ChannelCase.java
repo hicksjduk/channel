@@ -18,7 +18,7 @@ public class ChannelCase<T>
 
     public CaseResult runSync()
     {
-        GetResult<T> result = privateAccessor.getNonBlocking();
+        var result = privateAccessor.getNonBlocking();
         if (result == null)
             return CaseResult.NO_VALUE_AVAILABLE;
         if (!result.containsValue)
@@ -30,7 +30,7 @@ public class ChannelCase<T>
     public CaseRunner<T> runAsync(Channel<Runnable> processorRunnerChannel,
             SelectGroup selectGroup)
     {
-        CaseRunner<T> cr = new CaseRunner<>(this, processorRunnerChannel, selectGroup);
+        var cr = new CaseRunner<>(this, processorRunnerChannel, selectGroup);
         ForkJoinPool.commonPool().execute(cr);
         return cr;
     }

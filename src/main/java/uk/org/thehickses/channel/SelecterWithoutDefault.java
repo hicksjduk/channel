@@ -57,11 +57,11 @@ public class SelecterWithoutDefault implements Selecter
     @Override
     public boolean run()
     {
-        int caseCount = cases.size();
-        SelectGroup selectGroup = new SelectGroup();
-        Channel<Runnable> processorRunnerChannel = new Channel<>(caseCount);
+        var caseCount = cases.size();
+        var selectGroup = new SelectGroup();
+        var processorRunnerChannel = new Channel<Runnable>(caseCount);
         cases.forEach(c -> c.runAsync(processorRunnerChannel, selectGroup));
-        Runnable processorRunner = IntStream
+        var processorRunner = IntStream
                 .range(0, caseCount)
                 .mapToObj(i -> processorRunnerChannel.get().value)
                 .filter(Objects::nonNull)

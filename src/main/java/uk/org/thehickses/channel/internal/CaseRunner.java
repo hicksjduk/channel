@@ -23,7 +23,7 @@ public class CaseRunner<T> implements Runnable
     @Override
     public void run()
     {
-        GetResult<T> result = privateAccessor.get(selectControllerSupplier);
+        var result = privateAccessor.get(selectControllerSupplier);
         processorRunnerChannel
                 .put(result.containsValue ? () -> processor.accept(result.value) : null);
     }

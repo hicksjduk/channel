@@ -60,8 +60,8 @@ public class Channel<T>
      */
     public boolean close()
     {
-        Stream.Builder<Request> requests = Stream.builder();
-        boolean wasOpen = doWithLock(lock, () -> {
+        var requests = Stream.<Request> builder();
+        var wasOpen = doWithLock(lock, () -> {
             if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
                 return false;
             Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
@@ -140,7 +140,7 @@ public class Channel<T>
 
     private PutRequest<T> putRequest(T value)
     {
-        PutRequest<T> request = new PutRequest<>(value);
+        var request = new PutRequest<>(value);
         doWithLock(lock, () -> {
             if (!isOpen())
                 request.setChannelClosed();
@@ -175,7 +175,7 @@ public class Channel<T>
 
     private GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
-        GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
+        var request = new GetRequest<>(selectControllerSupplier);
         doWithLock(lock, () -> {
             if (!isOpen())
                 request.setChannelClosed();
@@ -190,7 +190,7 @@ public class Channel<T>
 
     ChannelPrivateAccessor<T> privateAccessor()
     {
-        Channel<T> channel = this;
+        var channel = this;
         return new ChannelPrivateAccessor<T>()
         {
             @Override
@@ -228,12 +228,12 @@ public class Channel<T>
     {
         while (!getQueue.isEmpty() && !putQueue.isEmpty())
         {
-            GetRequest<T> getRequest = getQueue.pop();
+            var getRequest = getQueue.pop();
             if (!getRequest.isSelectable())
                 continue;
             if (putQueue.size() > bufferSize)
                 putQueue.get(bufferSize).setCompleted();
-            PutRequest<T> putRequest = putQueue.pop();
+            var putRequest = putQueue.pop();
             getRequest.setReturnedValue(putRequest.value);
         }
         if (status.get() == Status.CLOSE_WHEN_EMPTY)

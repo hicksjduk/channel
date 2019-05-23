@@ -32,7 +32,7 @@ public class SelecterWithDefault implements Selecter
     @Override
     public boolean run()
     {
-        AtomicBoolean allClosed = new AtomicBoolean(true);
+        var allClosed = new AtomicBoolean(true);
         if (cases
                 .stream()
                 .map(ChannelCase::runSync)
