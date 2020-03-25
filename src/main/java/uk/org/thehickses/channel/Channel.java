@@ -18,7 +18,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 /**
@@ -234,7 +233,7 @@ public class Channel<T>
         request.setNoValue();
     }
 
-    private void scheduleDeferredPut(T value, LongStream schedule)
+    private void scheduleDeferredPut(T value, Stream<Instant> schedule)
     {
         scheduledPutTasks
                 .add(new DeferredPutter(() -> put(value), schedule, scheduledPutTasks::remove)
@@ -243,21 +242,17 @@ public class Channel<T>
 
     public void putAt(T value, Instant first, Instant... others)
     {
-        LongStream schedule = Stream
-                .concat(Stream.of(first), Stream.of(others))
-                .sorted()
-                .mapToLong(Instant::toEpochMilli);
+        Stream<Instant> schedule = Stream.concat(Stream.of(first), Stream.of(others)).sorted();
         scheduleDeferredPut(value, schedule);
     }
 
     public void putAfter(T value, Duration first, Duration... others)
     {
-        long now = Instant.now().toEpochMilli();
-        LongStream schedule = Stream
+        Instant now = Instant.now();
+        Stream<Instant> schedule = Stream
                 .concat(Stream.of(first), Stream.of(others))
                 .sorted()
-                .mapToLong(Duration::toMillis)
-                .map(d -> d + now);
+                .map(now::plus);
         scheduleDeferredPut(value, schedule);
     }
 
@@ -268,8 +263,7 @@ public class Channel<T>
 
     public void putRepeatedlyStartingAt(T value, Instant start, Duration interval, long maxCount)
     {
-        long increment = interval.toMillis();
-        LongStream schedule = LongStream.iterate(start.toEpochMilli(), t -> t + increment);
+        Stream<Instant> schedule = Stream.iterate(start, t -> t.plus(interval));
         if (maxCount > 0)
             schedule = schedule.limit(maxCount);
         scheduleDeferredPut(value, schedule);
@@ -409,11 +403,11 @@ public class Channel<T>
     private static class DeferredPutter
     {
         private final Runnable putter;
-        private final LongStream schedule;
+        private final Stream<Instant> schedule;
         private final Consumer<DeferredPutter> endListener;
         private AtomicReference<Runnable> canceller;
 
-        public DeferredPutter(Runnable putter, LongStream schedule,
+        public DeferredPutter(Runnable putter, Stream<Instant> schedule,
                 Consumer<DeferredPutter> endListener)
         {
             this.putter = putter;
@@ -439,9 +433,9 @@ public class Channel<T>
             endListener.accept(this);
         }
 
-        private void waitAndPut(long time)
+        private void waitAndPut(Instant time)
         {
-            long delay = time - Instant.now().toEpochMilli();
+            long delay = time.toEpochMilli() - Instant.now().toEpochMilli();
             if (delay > 0)
                 try
                 {
@@ -453,7 +447,7 @@ public class Channel<T>
                 }
             putter.run();
         }
-        
+
         public void cancel()
         {
             canceller.updateAndGet(this::stop);
