@@ -2,6 +2,8 @@ package uk.org.thehickses.channel;
 
 import static uk.org.thehickses.locking.Locking.*;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
@@ -217,6 +219,36 @@ public class Channel<T>
             getQueue.remove(request);
         });
         request.setNoValue();
+    }
+    
+    public void putAt(T value, Instant first, Instant... others)
+    {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+    
+    public void putAfter(T value, Duration first, Duration... others)
+    {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+    
+    public void putRepeatedlyStartingAt(T value, Instant start, Duration interval)
+    {
+        putRepeatedlyStartingAt(value, start, interval, 0);
+    }
+    
+    public void putRepeatedlyStartingAt(T value, Instant start, Duration interval, int maxCount)
+    {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+    
+    public void putRepeatedlyStartingAfter(T value, Duration start, Duration interval)
+    {
+        putRepeatedlyStartingAfter(value, start, interval, 0);
+    }
+    
+    public void putRepeatedlyStartingAfter(T value, Duration start, Duration interval, int maxCount)
+    {
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     private static interface Request
