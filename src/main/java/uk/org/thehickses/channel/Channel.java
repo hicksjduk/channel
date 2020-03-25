@@ -10,11 +10,15 @@ import java.util.Deque;
 import java.util.LinkedList;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 /**
@@ -32,6 +36,7 @@ public class Channel<T>
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
     private final LinkedList<PutRequest<T>> putQueue = new LinkedList<>();
     private final Lock lock = new ReentrantLock();
+    private final Deque<DeferredPutter> scheduledPutTasks = new ConcurrentLinkedDeque<>();
 
     /**
      * Creates a channel with the default buffer size of 0.
@@ -56,13 +61,15 @@ public class Channel<T>
      */
     public boolean close()
     {
+        scheduledPutTasks.forEach(DeferredPutter::cancel);
         Stream.Builder<Request> requests = Stream.builder();
-        boolean wasOpen = doWithLock(lock, () -> {
-            if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
-                return false;
-            Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
-            return true;
-        });
+        boolean wasOpen = doWithLock(lock, () ->
+            {
+                if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
+                    return false;
+                Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
+                return true;
+            });
         if (wasOpen)
             requests.build().forEach(Request::setChannelClosed);
         return wasOpen;
@@ -71,10 +78,11 @@ public class Channel<T>
     private static <V, C extends Collection<? extends V>> Consumer<C> drainer(
             Stream.Builder<V> target)
     {
-        return source -> {
-            source.stream().forEach(target);
-            source.clear();
-        };
+        return source ->
+            {
+                source.stream().forEach(target);
+                source.clear();
+            };
     }
 
     /**
@@ -88,10 +96,11 @@ public class Channel<T>
 
     private void closeIfEmpty()
     {
-        doWithLock(lock, () -> {
-            if (putQueue.isEmpty())
-                close();
-        });
+        doWithLock(lock, () ->
+            {
+                if (putQueue.isEmpty() && scheduledPutTasks.isEmpty())
+                    close();
+            });
     }
 
     public boolean isOpen()
@@ -137,17 +146,18 @@ public class Channel<T>
     private PutRequest<T> putRequest(T value)
     {
         PutRequest<T> request = new PutRequest<>(value);
-        doWithLock(lock, () -> {
-            if (!isOpen())
-                request.setChannelClosed();
-            else
+        doWithLock(lock, () ->
             {
-                if (putQueue.size() < bufferSize)
-                    request.setCompleted();
-                putQueue.offer(request);
-                processQueues();
-            }
-        });
+                if (!isOpen())
+                    request.setChannelClosed();
+                else
+                {
+                    if (putQueue.size() < bufferSize)
+                        request.setCompleted();
+                    putQueue.offer(request);
+                    processQueues();
+                }
+            });
         return request;
     }
 
@@ -172,27 +182,29 @@ public class Channel<T>
     private GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
         GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
-        doWithLock(lock, () -> {
-            if (!isOpen())
-                request.setChannelClosed();
-            else
+        doWithLock(lock, () ->
             {
-                getQueue.offer(request);
-                processQueues();
-            }
-        });
+                if (!isOpen())
+                    request.setChannelClosed();
+                else
+                {
+                    getQueue.offer(request);
+                    processQueues();
+                }
+            });
         return request;
     }
 
     GetResult<T> getNonBlocking()
     {
-        return doWithLock(lock, () -> {
-            if (!isOpen())
-                return new GetResult<>();
-            if (putQueue.isEmpty())
-                return null;
-            return get();
-        });
+        return doWithLock(lock, () ->
+            {
+                if (!isOpen())
+                    return new GetResult<>();
+                if (putQueue.isEmpty())
+                    return null;
+                return get();
+            });
     }
 
     private void processQueues()
@@ -215,40 +227,63 @@ public class Channel<T>
     {
         if (request.isComplete())
             return;
-        doWithLock(lock, () -> {
-            getQueue.remove(request);
-        });
+        doWithLock(lock, () ->
+            {
+                getQueue.remove(request);
+            });
         request.setNoValue();
     }
-    
+
+    private void scheduleDeferredPut(T value, LongStream schedule)
+    {
+        scheduledPutTasks
+                .add(new DeferredPutter(() -> put(value), schedule, scheduledPutTasks::remove)
+                        .scheduleIfNotAlreadyRunning());
+    }
+
     public void putAt(T value, Instant first, Instant... others)
     {
-        throw new UnsupportedOperationException("Not implemented yet");
+        LongStream schedule = Stream
+                .concat(Stream.of(first), Stream.of(others))
+                .sorted()
+                .mapToLong(Instant::toEpochMilli);
+        scheduleDeferredPut(value, schedule);
     }
-    
+
     public void putAfter(T value, Duration first, Duration... others)
     {
-        throw new UnsupportedOperationException("Not implemented yet");
+        long now = Instant.now().toEpochMilli();
+        LongStream schedule = Stream
+                .concat(Stream.of(first), Stream.of(others))
+                .sorted()
+                .mapToLong(Duration::toMillis)
+                .map(d -> d + now);
+        scheduleDeferredPut(value, schedule);
     }
-    
+
     public void putRepeatedlyStartingAt(T value, Instant start, Duration interval)
     {
         putRepeatedlyStartingAt(value, start, interval, 0);
     }
-    
-    public void putRepeatedlyStartingAt(T value, Instant start, Duration interval, int maxCount)
+
+    public void putRepeatedlyStartingAt(T value, Instant start, Duration interval, long maxCount)
     {
-        throw new UnsupportedOperationException("Not implemented yet");
+        long increment = interval.toMillis();
+        LongStream schedule = LongStream.iterate(start.toEpochMilli(), t -> t + increment);
+        if (maxCount > 0)
+            schedule = schedule.limit(maxCount);
+        scheduleDeferredPut(value, schedule);
     }
-    
+
     public void putRepeatedlyStartingAfter(T value, Duration start, Duration interval)
     {
         putRepeatedlyStartingAfter(value, start, interval, 0);
     }
-    
-    public void putRepeatedlyStartingAfter(T value, Duration start, Duration interval, int maxCount)
+
+    public void putRepeatedlyStartingAfter(T value, Duration start, Duration interval,
+            long maxCount)
     {
-        throw new UnsupportedOperationException("Not implemented yet");
+        putRepeatedlyStartingAt(value, Instant.now().plus(start), interval, maxCount);
     }
 
     private static interface Request
@@ -369,5 +404,69 @@ public class Channel<T>
     private static enum Status
     {
         OPEN, CLOSED, CLOSE_WHEN_EMPTY
+    }
+
+    private static class DeferredPutter
+    {
+        private final Runnable putter;
+        private final LongStream schedule;
+        private final Consumer<DeferredPutter> endListener;
+        private AtomicReference<Runnable> canceller;
+
+        public DeferredPutter(Runnable putter, LongStream schedule,
+                Consumer<DeferredPutter> endListener)
+        {
+            this.putter = putter;
+            this.schedule = schedule;
+            this.endListener = endListener;
+        }
+
+        public DeferredPutter scheduleIfNotAlreadyRunning()
+        {
+            canceller.updateAndGet(r -> r == null ? submitAndGetCanceller() : r);
+            return this;
+        }
+
+        private Runnable submitAndGetCanceller()
+        {
+            ForkJoinTask<?> task = ForkJoinPool.commonPool().submit(this::run);
+            return () -> task.cancel(true);
+        }
+
+        private void run()
+        {
+            schedule.forEach(this::waitAndPut);
+            endListener.accept(this);
+        }
+
+        private void waitAndPut(long time)
+        {
+            long delay = time - Instant.now().toEpochMilli();
+            if (delay > 0)
+                try
+                {
+                    Thread.sleep(delay);
+                }
+                catch (InterruptedException e)
+                {
+                    return;
+                }
+            putter.run();
+        }
+        
+        public void cancel()
+        {
+            canceller.updateAndGet(this::stop);
+        }
+
+        private Runnable stop(Runnable stopper)
+        {
+            if (stopper != null)
+            {
+                stopper.run();
+                endListener.accept(this);
+            }
+            return null;
+        }
     }
 }
