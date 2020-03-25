@@ -256,6 +256,16 @@ public class Channel<T>
         scheduleDeferredPut(value, schedule);
     }
 
+    public void putRepeatedly(T value, Duration interval)
+    {
+        putRepeatedly(value, interval, 0);
+    }
+
+    public void putRepeatedly(T value, Duration interval, long maxCount)
+    {
+        putRepeatedlyStartingAfter(value, interval, interval, maxCount);
+    }
+
     public void putRepeatedlyStartingAt(T value, Instant start, Duration interval)
     {
         putRepeatedlyStartingAt(value, start, interval, 0);
