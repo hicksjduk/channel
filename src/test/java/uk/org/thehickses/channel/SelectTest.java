@@ -7,8 +7,8 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import uk.org.thehickses.channel.Select.Selecter;
 
@@ -22,7 +22,7 @@ public class SelectTest
     private Consumer<Boolean> m2 = mock(Consumer.class);
     private Consumer<String> m3 = mock(Consumer.class);
 
-    @After
+    @AfterEach
     public void tearDown()
     {
         verifyNoMoreInteractions(m1, m2, m3);
