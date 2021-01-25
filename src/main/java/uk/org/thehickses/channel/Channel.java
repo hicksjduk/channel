@@ -174,10 +174,8 @@ public class Channel<T>
     {
         return doWithLock(lock, () ->
             {
-                if (!isOpen())
-                    return new GetResult<>();
                 if (putQueue.isEmpty())
-                    return null;
+                    return isOpen() ? null : new GetResult<>();
                 return get();
             });
     }

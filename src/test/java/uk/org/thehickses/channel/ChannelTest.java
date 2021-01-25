@@ -1,34 +1,31 @@
 package uk.org.thehickses.channel;
-
+import static org.junit.jupiter.params.provider.Arguments.*;
 import static org.assertj.core.api.Assertions.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 public class ChannelTest
 {
-    @Test
-    public void testSingleSupplier()
+    static Stream<Arguments> testChannel()
     {
-        testChannel(1);
+        return Stream.of(arguments(1), arguments(90));
     }
 
-    @Test
-    public void testMultipleSuppliers()
-    {
-        testChannel(90);
-    }
-
-    public void testChannel(int supplierThreads)
+    @ParameterizedTest
+    @MethodSource
+    void testChannel(int supplierThreads)
     {
         Channel<Integer> channel = new Channel<>();
         Channel<Integer> putsAndGets = new Channel<>(supplierThreads + 1);
@@ -130,5 +127,37 @@ public class ChannelTest
         }
         assertThat(ch.get().containsValue).isEqualTo(expectedResult);
         assertThat(ch.get().containsValue).isFalse();
+    }
+    
+    @Test
+    void testGetNonBlockingChannelOpenAndEmpty()
+    {
+        Channel<Void> ch = new Channel<>(1);
+        assertThat(ch.getNonBlocking()).isNull();
+    }
+
+    @Test
+    void testGetNonBlockingChannelOpenAndNotEmpty()
+    {
+        Channel<Void> ch = new Channel<>(1);
+        ch.put(null);
+        assertThat(ch.getNonBlocking().containsValue).isTrue();
+    }
+
+    @Test
+    void testGetNonBlockingChannelClosedAndEmpty()
+    {
+        Channel<Void> ch = new Channel<>(1);
+        ch.close();
+        assertThat(ch.getNonBlocking().containsValue).isFalse();
+    }
+
+    @Test
+    void testGetNonBlockingChannelClosedAndNotEmpty()
+    {
+        Channel<Void> ch = new Channel<>(1);
+        ch.put(null);
+        ch.close();
+        assertThat(ch.getNonBlocking().containsValue).isTrue();
     }
 }
