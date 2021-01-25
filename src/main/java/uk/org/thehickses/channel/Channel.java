@@ -3,7 +3,6 @@ package uk.org.thehickses.channel;
 import static uk.org.thehickses.locking.Locking.*;
 
 import java.util.ArrayDeque;
-import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.Objects;
@@ -14,6 +13,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+
+import org.omg.CORBA.Request;
 
 /**
  * A class that emulates a channel in the Go language.
@@ -48,31 +49,35 @@ public class Channel<T>
     }
 
     /**
-     * If the channel is not already closed, closes the channel and signals all pending requests that it is closed.
+     * If the channel is not already closed, closes the channel and signals all blocked requests that it is closed.
+     * Completed put requests remain in the put queue and remain available for retrieval.
      * 
      * @return whether this call closed the channel. A return value of false means that the channel was already closed.
      */
     public boolean close()
     {
-        Stream.Builder<Request> requests = Stream.builder();
-        boolean wasOpen = doWithLock(lock, () -> {
-            if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
-                return false;
-            Stream.of(getQueue, putQueue).filter(q -> !q.isEmpty()).forEach(drainer(requests));
-            return true;
-        });
-        if (wasOpen)
-            requests.build().forEach(Request::setChannelClosed);
-        return wasOpen;
-    }
-
-    private static <V, C extends Collection<? extends V>> Consumer<C> drainer(
-            Stream.Builder<V> target)
-    {
-        return source -> {
-            source.stream().forEach(target);
-            source.clear();
-        };
+        if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
+            return false;
+        doWithLock(lock, () ->
+            {
+                Stream
+                        .of(getQueue, putQueue)
+                        .filter(q -> !q.isEmpty())
+                        .map(q -> q.iterator())
+                        .forEach(it ->
+                            {
+                                while (it.hasNext())
+                                {
+                                    Request req = it.next();
+                                    if (!req.isComplete())
+                                    {
+                                        req.setChannelClosed();
+                                        it.remove();
+                                    }
+                                }
+                            });
+            });
+        return true;
     }
 
     /**
@@ -86,10 +91,11 @@ public class Channel<T>
 
     private void closeIfEmpty()
     {
-        doWithLock(lock, () -> {
-            if (putQueue.isEmpty())
-                close();
-        });
+        doWithLock(lock, () ->
+            {
+                if (putQueue.isEmpty())
+                    close();
+            });
     }
 
     public boolean isOpen()
@@ -135,17 +141,18 @@ public class Channel<T>
     private PutRequest<T> putRequest(T value)
     {
         PutRequest<T> request = new PutRequest<>(value);
-        doWithLock(lock, () -> {
-            if (!isOpen())
-                request.setChannelClosed();
-            else
+        doWithLock(lock, () ->
             {
-                if (putQueue.size() < bufferSize)
-                    request.setCompleted();
-                putQueue.offer(request);
-                processQueues();
-            }
-        });
+                if (!isOpen())
+                    request.setChannelClosed();
+                else
+                {
+                    if (putQueue.size() < bufferSize)
+                        request.setCompleted();
+                    putQueue.offer(request);
+                    processQueues();
+                }
+            });
         return request;
     }
 
@@ -170,27 +177,29 @@ public class Channel<T>
     private GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
         GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
-        doWithLock(lock, () -> {
-            if (!isOpen())
-                request.setChannelClosed();
-            else
+        doWithLock(lock, () ->
             {
-                getQueue.offer(request);
-                processQueues();
-            }
-        });
+                if (!isOpen() && putQueue.isEmpty())
+                    request.setChannelClosed();
+                else
+                {
+                    getQueue.offer(request);
+                    processQueues();
+                }
+            });
         return request;
     }
 
     GetResult<T> getNonBlocking()
     {
-        return doWithLock(lock, () -> {
-            if (!isOpen())
-                return new GetResult<>();
-            if (putQueue.isEmpty())
-                return null;
-            return get();
-        });
+        return doWithLock(lock, () ->
+            {
+                if (!isOpen())
+                    return new GetResult<>();
+                if (putQueue.isEmpty())
+                    return null;
+                return get();
+            });
     }
 
     private void processQueues()
@@ -213,15 +222,18 @@ public class Channel<T>
     {
         if (request.isComplete())
             return;
-        doWithLock(lock, () -> {
-            getQueue.remove(request);
-        });
+        doWithLock(lock, () ->
+            {
+                getQueue.remove(request);
+            });
         request.setNoValue();
     }
 
     private static interface Request
     {
         void setChannelClosed();
+
+        boolean isComplete();
     }
 
     @FunctionalInterface
@@ -304,6 +316,12 @@ public class Channel<T>
         public void setChannelClosed()
         {
             responder.complete(() -> false);
+        }
+
+        @Override
+        public boolean isComplete()
+        {
+            return responder.isDone();
         }
 
         public void setCompleted()

@@ -151,5 +151,7 @@ public class ChannelTest
         {
             done.get();
         }
+        assertThat(ch.get().containsValue).isEqualTo(expectedResult);
+        assertThat(ch.get().containsValue).isFalse();
     }
 }
