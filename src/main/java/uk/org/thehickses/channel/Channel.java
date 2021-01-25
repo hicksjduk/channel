@@ -14,8 +14,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-import org.omg.CORBA.Request;
-
 /**
  * A class that emulates a channel in the Go language.
  * 
@@ -78,24 +76,6 @@ public class Channel<T>
                             });
             });
         return true;
-    }
-
-    /**
-     * Tells the channel to close when all the existing values have been consumed.
-     */
-    public void closeWhenEmpty()
-    {
-        if (status.compareAndSet(Status.OPEN, Status.CLOSE_WHEN_EMPTY))
-            closeIfEmpty();
-    }
-
-    private void closeIfEmpty()
-    {
-        doWithLock(lock, () ->
-            {
-                if (putQueue.isEmpty())
-                    close();
-            });
     }
 
     public boolean isOpen()
@@ -214,8 +194,6 @@ public class Channel<T>
             PutRequest<T> putRequest = putQueue.pop();
             getRequest.setReturnedValue(putRequest.value);
         }
-        if (status.get() == Status.CLOSE_WHEN_EMPTY)
-            closeIfEmpty();
     }
 
     void cancel(GetRequest<T> request)
@@ -354,6 +332,6 @@ public class Channel<T>
 
     private static enum Status
     {
-        OPEN, CLOSED, CLOSE_WHEN_EMPTY
+        OPEN, CLOSED
     }
 }

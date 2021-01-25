@@ -75,29 +75,6 @@ public class ChannelTest
     }
 
     @Test
-    public void testCloseWhenEmptyEmptyWhenCalled()
-    {
-        testCloseWhenEmpty(0);
-    }
-
-    @Test
-    public void testCloseWhenEmptyNotEmptyWhenCalled()
-    {
-        testCloseWhenEmpty(40000);
-    }
-
-    public void testCloseWhenEmpty(int valueCount)
-    {
-        Channel<Integer> ch = new Channel<>(valueCount);
-        for (int i = 0; i < valueCount; i++)
-            ch.put(i);
-        ch.closeWhenEmpty();
-        Set<Integer> values = new HashSet<>(valueCount);
-        ch.range(values::add);
-        assertThat(values.size()).isEqualTo(valueCount);
-    }
-    
-    @Test
     public void testDoubleClose()
     {
         Channel<Void> ch = new Channel<>();
