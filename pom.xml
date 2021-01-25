@@ -4,7 +4,7 @@
 
 	<groupId>uk.org.thehickses</groupId>
 	<artifactId>channel</artifactId>
-	<version>0.1</version>
+	<version>1.0</version>
 	<packaging>jar</packaging>
 
 	<name>channel</name>
@@ -20,7 +20,7 @@
 		<dependency>
 			<groupId>uk.org.thehickses</groupId>
 			<artifactId>locking</artifactId>
-			<version>0.1</version>
+			<version>1.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.slf4j</groupId>
