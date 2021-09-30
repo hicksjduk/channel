@@ -198,10 +198,7 @@ public class Channel<T>
     {
         if (request.isComplete())
             return;
-        doWithLock(lock, () ->
-            {
-                getQueue.remove(request);
-            });
+        doWithLock(lock, () -> getQueue.remove(request));
         request.setNoValue();
     }
 
