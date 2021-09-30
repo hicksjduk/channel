@@ -8,7 +8,6 @@ import java.util.LinkedList;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -25,7 +24,7 @@ import java.util.stream.Stream;
 public class Channel<T>
 {
     private final int bufferSize;
-    private final AtomicReference<Status> status = new AtomicReference<>(Status.OPEN);
+    private final Status status = Status.OPEN;
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
     private final LinkedList<PutRequest<T>> putQueue = new LinkedList<>();
     private final Lock lock = new ReentrantLock();
@@ -54,10 +53,10 @@ public class Channel<T>
      */
     public boolean close()
     {
-        if (status.getAndSet(Status.CLOSED) == Status.CLOSED)
-            return false;
-        doWithLock(lock, () ->
+        return doWithLock(lock, () ->
             {
+                if (status == Status.CLOSED)
+                    return false;
                 Stream
                         .of(getQueue, putQueue)
                         .filter(q -> !q.isEmpty())
@@ -74,13 +73,13 @@ public class Channel<T>
                                     }
                                 }
                             });
+                return true;
             });
-        return true;
     }
 
     public boolean isOpen()
     {
-        return status.get() != Status.CLOSED;
+        return doWithLock(lock, () -> status != Status.CLOSED);
     }
 
     /**
