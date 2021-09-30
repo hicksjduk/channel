@@ -56,12 +56,13 @@ public class SelectTest
     @Test
     public void testWithMultiplePut()
     {
-        new Thread(() -> {
-            ch3.put("Bonjour");
-            ch1.put(981);
-            ch2.put(false);
-            ch3.put("Hej");
-        }).start();
+        ForkJoinPool.commonPool().execute(() ->
+            {
+                ch3.put("Bonjour");
+                ch1.put(981);
+                ch2.put(false);
+                ch3.put("Hej");
+            });
         assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
         verify(m3).accept("Bonjour");
         assertThat(ch1.get().value).isEqualTo(981);
@@ -73,13 +74,14 @@ public class SelectTest
     public void testWithMultiplePutAndGet()
     {
         Channel<Integer> valueCount = new Channel<>(1);
-        new Thread(() -> {
-            valueCount.put(4);
-            ch3.put("Bonjour");
-            ch1.put(981);
-            ch2.put(false);
-            ch3.put("Hej");
-        }).start();
+        ForkJoinPool.commonPool().execute(() ->
+            {
+                valueCount.put(4);
+                ch3.put("Bonjour");
+                ch1.put(981);
+                ch2.put(false);
+                ch3.put("Hej");
+            });
         Selecter select = Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3);
         for (int count = valueCount.get().value; count > 0; count += valueCount.get().value)
         {
@@ -113,10 +115,8 @@ public class SelectTest
     @Test
     public void testWithDefaultAndTwoPuts()
     {
-        ch2 = new Channel<>(1);
-        ch3 = new Channel<>(1);
-        ch2.put(false);
-        ch3.put("Hello");
+        (ch2 = new Channel<>(1)).put(false);
+        (ch3 = new Channel<>(1)).put("Hello");
         Runnable m4 = mock(Runnable.class);
         assertThat(
                 Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
@@ -145,6 +145,26 @@ public class SelectTest
                 Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
                         .isTrue();
         verify(m4).run();
+        verifyNoMoreInteractions(m4);
+    }
+
+    @Test
+    public void testValuePutIsNullNoDefault()
+    {
+        ForkJoinPool.commonPool().execute(() -> ch2.put(null));
+        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
+        verify(m2).accept(null);
+    }
+
+    @Test
+    public void testValuePutIsNullWithDefault()
+    {
+        Runnable m4 = mock(Runnable.class);
+        (ch2 = new Channel<>(1)).put(null);
+        assertThat(
+                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
+                        .isTrue();
+        verify(m2).accept(null);
         verifyNoMoreInteractions(m4);
     }
 }
