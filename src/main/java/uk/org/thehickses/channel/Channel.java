@@ -24,7 +24,7 @@ import java.util.stream.Stream;
 public class Channel<T>
 {
     private final int bufferSize;
-    private final Status status = Status.OPEN;
+    private Status status = Status.OPEN;
     private final Deque<GetRequest<T>> getQueue = new ArrayDeque<>();
     private final LinkedList<PutRequest<T>> putQueue = new LinkedList<>();
     private final Lock lock = new ReentrantLock();
@@ -57,6 +57,7 @@ public class Channel<T>
             {
                 if (status == Status.CLOSED)
                     return false;
+                status = Status.CLOSED;
                 Stream
                         .of(getQueue, putQueue)
                         .filter(q -> !q.isEmpty())
