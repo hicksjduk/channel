@@ -175,4 +175,42 @@ public class SelectTest
         verify(m2).accept(null);
         verifyNoMoreInteractions(m4);
     }
+
+    @Test
+    public void testRangeNoDefault()
+    {
+        ForkJoinPool.commonPool().execute(() ->
+            {
+                ch1.put(41);
+                ch2.put(null);
+                ch1.put(422141);
+                ch3.put("Hello");
+                Stream.of(ch1, ch2, ch3).forEach(Channel::close);
+            });
+        Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).range();
+        verify(m1).accept(41);
+        verify(m2).accept(null);
+        verify(m1).accept(422141);
+        verify(m3).accept("Hello");
+    }
+
+    @Test
+    public void testRangeWithDefault()
+    {
+        (ch1 = new Channel<>(2)).put(41);
+        (ch2 = new Channel<>(1)).put(null);
+        ch1.put(422141);
+        (ch3 = new Channel<>(1)).put("Hello");
+        Stream.of(ch1, ch2, ch3).forEach(Channel::close);
+        Select
+                .withCase(ch1, m1)
+                .withCase(ch2, m2)
+                .withCase(ch3, m3)
+                .withDefault(() -> Stream.of(ch1, ch2, ch3).forEach(Channel::close))
+                .range();
+        verify(m1).accept(41);
+        verify(m2).accept(null);
+        verify(m1).accept(422141);
+        verify(m3).accept("Hello");
+    }
 }

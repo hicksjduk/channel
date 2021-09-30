@@ -10,6 +10,8 @@ import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import uk.org.thehickses.channel.Channel.RangeBreakException;
+
 /**
  * A Java implementation of the Go select statement, for reading multiple channels.
  * 
@@ -31,6 +33,17 @@ public class Select
     public static interface Selecter
     {
         boolean run();
+
+        default void range()
+        {
+            try
+            {
+                while (run())
+                {}
+            }
+            catch (RangeBreakException ex)
+            {}
+        }
     }
 
     /**
