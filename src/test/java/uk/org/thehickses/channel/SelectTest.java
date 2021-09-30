@@ -11,6 +11,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import uk.org.thehickses.channel.Select.Selecter;
+import uk.org.thehickses.channel.Select.SelecterWithDefault;
 
 @SuppressWarnings("unchecked")
 public class SelectTest
@@ -118,10 +119,17 @@ public class SelectTest
         (ch2 = new Channel<>(1)).put(false);
         (ch3 = new Channel<>(1)).put("Hello");
         Runnable m4 = mock(Runnable.class);
-        assertThat(
-                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
-                        .isTrue();
+        SelecterWithDefault select = Select
+                .withCase(ch1, m1)
+                .withCase(ch2, m2)
+                .withCase(ch3, m3)
+                .withDefault(m4);
+        assertThat(select.run()).isTrue();
         verify(m2).accept(false);
+        assertThat(select.run()).isTrue();
+        verify(m3).accept("Hello");
+        assertThat(select.run()).isTrue();
+        verify(m4).run();
         verifyNoMoreInteractions(m4);
     }
 
