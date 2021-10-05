@@ -3,18 +3,24 @@ package uk.org.thehickses.channel;
 import static uk.org.thehickses.locking.Locking.*;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.Objects;
 import java.util.Spliterator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+
+import javax.net.ssl.SSLEngineResult.Status;
+
+import org.omg.CORBA.Request;
 
 /**
  * A class that emulates a channel in the Go language.
@@ -56,29 +62,27 @@ public class Channel<T> implements Iterable<T>
      */
     public boolean close()
     {
-        return doWithLock(lock, () ->
-            {
-                if (status == Status.CLOSED)
-                    return false;
-                status = Status.CLOSED;
-                Stream
-                        .of(getQueue, putQueue)
-                        .filter(q -> !q.isEmpty())
-                        .map(q -> q.iterator())
-                        .forEach(it ->
-                            {
-                                while (it.hasNext())
-                                {
-                                    Request req = it.next();
-                                    if (!req.isComplete())
-                                    {
-                                        req.setChannelClosed();
-                                        it.remove();
-                                    }
-                                }
-                            });
-                return true;
-            });
+        Stream<Request> blockedRequests = doWithLock(lock, this::processClose);
+        if (blockedRequests != null)
+            blockedRequests.forEach(Request::setChannelClosed);
+        return blockedRequests != null;
+    }
+
+    private Stream<Request> processClose()
+    {
+        if (status == Status.CLOSED)
+            return null;
+        status = Status.CLOSED;
+        Collection<Request> blocked = new ArrayList<Request>();
+        if (!getQueue.isEmpty())
+        {
+            blocked.addAll(getQueue);
+            getQueue.clear();
+        }
+        else
+            for (int i = putQueue.size() - 1; i >= bufferSize; i--)
+                blocked.add(putQueue.remove(i));
+        return blocked.stream();
     }
 
     /**
