@@ -51,10 +51,11 @@ public class ChannelTest
         }
         List<Integer> values = new ArrayList<Integer>();
         Runnable reader = () -> {
-            channel.range(v -> {
+            for (Integer v : channel)
+            {
                 values.add(v);
                 putsAndGets.put(-1);
-            });
+            }
         };
         ForkJoinPool.commonPool().execute(reader);
         int outstandingValueCount = Integer.MIN_VALUE;

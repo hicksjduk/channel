@@ -28,17 +28,7 @@ and a `value` which is only meaningful if `containsValue` is `true`.
 
 ### Iterating over a channel
 
-Go provides an easy way to iterate over the values from a channel using its `range` operator.
-This implementation provides a way to simulate this via its `range()` method. You pass to this method a
-`Consumer` of the data type handled by the channel, and it repeatedly calls the channel's
-`get()` method, and passes each value retrieved to the specified `Consumer`, until the channel is
-closed. In a Go range statement, the iteration can be explicitly terminated by a `break`, `continue` or
-`return` statement within the code that processes the value. In Java, this is not possible because the processing
-happens in a separate routine; however, explicit termination can be achieved by throwing a
-`RangeBreakException` within the processing code.
-
-However, this Java implementation also implements the `Iterable` interface, which means that it is possible to iterate over a channel using the Java `for (value : channel)` construct. This has the advantage that the `break`, `continue` and `return` statements can be used naturally. within
-the body of the `for` loop.
+A channel implements the `Iterable` interface, which means that it is possible to iterate over a channel using the Java for-each loop.
 
 A channel also provides a `stream()` method, which creates a `Stream` over the values retrieved from the channel.
 
@@ -121,7 +111,7 @@ ch <- value
 ch.put(value);
 ```
 
-### Range over a channel (process values in turn until the channel is closed), terminating the iteration if the value is "stop"
+### Iterate a channel until it is closed, or the value encountered is "stop"
 
 **Go**
 
@@ -136,18 +126,6 @@ for value := range ch {
 
 **Java**
 
-Using `range()`:
-
-```java
-ch.range(value -> {
-	// Process value
-	if (value.equals("stop"))
-		throw new RangeBreakException();
-});
-```
- 
-Using a `for` loop:
-
 ```java
 for (String value : ch) {
 	// Process value
@@ -155,14 +133,6 @@ for (String value : ch) {
 		break;
 }
 ```
-
-Using a `Stream` (this example sums the elements read from a channel of `Integer`s using stream
-reduction):
-
-```java
-int sum = ch.stream().reduce((a, b) -> a + b);
-```
-
 
 ### Close a channel
 

@@ -81,31 +81,14 @@ public class Channel<T> implements Iterable<T>
             });
     }
 
+    /**
+     * Gets whether the channel is open.
+     * 
+     * @return whether the channel is open.
+     */
     public boolean isOpen()
     {
         return doWithLock(lock, () -> status != Status.CLOSED);
-    }
-
-    /**
-     * Processes values from the channel until it is closed.
-     * 
-     * @param processor
-     *            the processor that is invoked to process each value. This processor may signal that the iteration
-     *            should terminate by throwing a {@link RangeBreakException}.
-     */
-    public void range(Consumer<? super T> processor)
-    {
-        Objects.requireNonNull(processor);
-        GetResult<T> result;
-        while ((result = get()).containsValue)
-            try
-            {
-                processor.accept(result.value);
-            }
-            catch (RangeBreakException ex)
-            {
-                break;
-            }
     }
 
     /**
@@ -113,7 +96,7 @@ public class Channel<T> implements Iterable<T>
      * ahead of it in the put queue reduces to less than the channel's buffer size, or the value is used to satisfy a
      * get request.
      * 
-     * @return whether the value was put. A value of false means that the channel was closed at the time the request is
+     * @return whether the value was put. A value of false means that the channel was closed at the time the request was
      *         made, or became closed while the request was blocked.
      */
     public boolean put(T value)
@@ -205,13 +188,11 @@ public class Channel<T> implements Iterable<T>
         request.setNoValue();
     }
 
-    private static interface Request
-    {
-        void setChannelClosed();
-
-        boolean isComplete();
-    }
-    
+    /**
+     * Gets a {@link Stream} which contains the values retrieved from the channel.
+     * 
+     * @return the stream.
+     */
     public Stream<T> stream()
     {
         return StreamSupport.stream(spliterator(), false);
@@ -228,7 +209,7 @@ public class Channel<T> implements Iterable<T>
     {
         return new ChannelSpliterator();
     }
-    
+
     private class ChannelSpliterator implements Spliterator<T>
     {
         @Override
@@ -249,7 +230,8 @@ public class Channel<T> implements Iterable<T>
         @Override
         public long estimateSize()
         {
-            return doWithLock(lock, () -> status == Status.CLOSED ? putQueue.size() : Long.MAX_VALUE);
+            return doWithLock(lock,
+                    () -> status == Status.CLOSED ? putQueue.size() : Long.MAX_VALUE);
         }
 
         @Override
@@ -258,7 +240,14 @@ public class Channel<T> implements Iterable<T>
             return CONCURRENT & ORDERED;
         }
     }
-    
+
+    private static interface Request
+    {
+        void setChannelClosed();
+
+        boolean isComplete();
+    }
+
     @FunctionalInterface
     static interface GetResponse<T>
     {
@@ -368,11 +357,6 @@ public class Channel<T> implements Iterable<T>
                     throw new RuntimeException(e);
                 }
         }
-    }
-
-    @SuppressWarnings("serial")
-    public static class RangeBreakException extends RuntimeException
-    {
     }
 
     private static enum Status
