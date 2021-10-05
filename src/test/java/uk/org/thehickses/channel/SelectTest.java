@@ -1,216 +1,268 @@
 package uk.org.thehickses.channel;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import java.util.concurrent.ForkJoinPool;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import uk.org.thehickses.channel.Channel.RangeBreakException;
 import uk.org.thehickses.channel.Select.Selecter;
-import uk.org.thehickses.channel.Select.SelecterWithDefault;
 
 @SuppressWarnings("unchecked")
 public class SelectTest
 {
-    private Channel<Integer> ch1 = new Channel<>();
-    private Channel<Boolean> ch2 = new Channel<>();
-    private Channel<String> ch3 = new Channel<>();
-    private Consumer<Integer> m1 = mock(Consumer.class);
-    private Consumer<Boolean> m2 = mock(Consumer.class);
-    private Consumer<String> m3 = mock(Consumer.class);
+    private Channel<Integer> ch1 = new Channel<>(5);
+    private Channel<Boolean> ch2 = new Channel<>(5);
+    private Channel<String> ch3 = new Channel<>(5);
+    private Consumer<Integer> proc1 = mock(Consumer.class);
+    private Consumer<Boolean> proc2 = mock(Consumer.class);
+    private Consumer<String> proc3 = mock(Consumer.class);
+    private Runnable defaultProc = mock(Runnable.class);
 
     @AfterEach
     public void tearDown()
     {
-        verifyNoMoreInteractions(m1, m2, m3);
+        verifyNoMoreInteractions(proc1, proc2, proc3, defaultProc);
     }
 
     @Test
     public void testWithSinglePut1()
     {
-        testWithSinglePut(ch1, m1, 42);
+        testWithSinglePut(ch1, proc1, 42);
     }
 
     @Test
     public void testWithSinglePut2()
     {
-        testWithSinglePut(ch2, m2, true);
+        testWithSinglePut(ch2, proc2, true);
     }
 
     @Test
     public void testWithSinglePut3()
     {
-        testWithSinglePut(ch3, m3, "Hello");
+        testWithSinglePut(ch3, proc3, "Hello");
     }
 
     private <T> void testWithSinglePut(Channel<T> channel, Consumer<T> receiver, T value)
     {
-        ForkJoinPool.commonPool().execute(() -> channel.put(value));
-        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
+        channel.put(value);
+        assertThat(Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, proc3).run())
+                .isTrue();
         verify(receiver).accept(value);
     }
 
     @Test
     public void testWithMultiplePut()
     {
-        ForkJoinPool.commonPool().execute(() ->
-            {
-                ch3.put("Bonjour");
-                ch1.put(981);
-                ch2.put(false);
-                ch3.put("Hej");
-            });
-        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
-        verify(m3).accept("Bonjour");
-        assertThat(ch1.get().value).isEqualTo(981);
-        assertThat(ch2.get().value).isEqualTo(false);
-        assertThat(ch3.get().value).isEqualTo("Hej");
+        ch3.put("Bonjour");
+        ch1.put(981);
+        ch2.put(false);
+        ch3.put("Hej");
+        List<Runnable> verifiers = new ArrayList<>();
+        doAnswer(invocation -> verifiers.add(() -> verify(proc1).accept(invocation.getArgument(0))))
+                .when(proc1)
+                .accept(anyInt());
+        doAnswer(invocation -> verifiers.add(() -> verify(proc2).accept(invocation.getArgument(0))))
+                .when(proc2)
+                .accept(any());
+        doAnswer(invocation -> verifiers.add(() -> verify(proc3).accept(invocation.getArgument(0))))
+                .when(proc3)
+                .accept(any());
+        assertThat(Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, proc3).run())
+                .isTrue();
+        assertThat(verifiers.size()).isEqualTo(1);
+        verifiers.forEach(Runnable::run);
     }
 
     @Test
     public void testWithMultiplePutAndGet()
     {
-        Channel<Integer> valueCount = new Channel<>(1);
-        ForkJoinPool.commonPool().execute(() ->
-            {
-                valueCount.put(4);
-                ch3.put("Bonjour");
-                ch1.put(981);
-                ch2.put(false);
-                ch3.put("Hej");
-            });
-        Selecter select = Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3);
-        for (int count = valueCount.get().value; count > 0; count += valueCount.get().value)
-        {
+        ch3.put("Bonjour");
+        ch1.put(981);
+        ch2.put(false);
+        ch3.put("Hej");
+        Selecter select = Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, proc3);
+        for (int count = 0; count < 4; count++)
             assertThat(select.run()).isTrue();
-            valueCount.put(-1);
-        }
-        verify(m1).accept(981);
-        verify(m2).accept(false);
-        verify(m3).accept("Bonjour");
-        verify(m3).accept("Hej");
+        verify(proc1).accept(981);
+        verify(proc2).accept(false);
+        verify(proc3).accept("Bonjour");
+        verify(proc3).accept("Hej");
     }
 
     @Test
     public void testWithDefault()
     {
-        Runnable m4 = mock(Runnable.class);
-        assertThat(
-                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
-                        .isTrue();
-        verify(m4).run();
-        verifyNoMoreInteractions(m4);
+        assertThat(Select
+                .withCase(ch1, proc1)
+                .withCase(ch2, proc2)
+                .withCase(ch3, proc3)
+                .withDefault(defaultProc)
+                .run()).isTrue();
+        verify(defaultProc).run();
     }
 
     @Test
     public void testAllClosedNoDefault()
     {
         Stream.of(ch1, ch2, ch3).forEach(Channel::close);
-        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isFalse();
+        assertThat(Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, proc3).run())
+                .isFalse();
     }
 
     @Test
     public void testWithDefaultAndTwoPuts()
     {
-        (ch2 = new Channel<>(1)).put(false);
-        (ch3 = new Channel<>(1)).put("Hello");
-        Runnable m4 = mock(Runnable.class);
-        SelecterWithDefault select = Select
-                .withCase(ch1, m1)
-                .withCase(ch2, m2)
-                .withCase(ch3, m3)
-                .withDefault(m4);
+        ch2.put(false);
+        ch3.put("Hello");
+        Selecter select = Select
+                .withCase(ch1, proc1)
+                .withCase(ch2, proc2)
+                .withCase(ch3, proc3)
+                .withDefault(defaultProc);
         assertThat(select.run()).isTrue();
-        verify(m2).accept(false);
         assertThat(select.run()).isTrue();
-        verify(m3).accept("Hello");
         assertThat(select.run()).isTrue();
-        verify(m4).run();
-        verifyNoMoreInteractions(m4);
+        verify(proc2).accept(false);
+        verify(proc3).accept("Hello");
+        verify(defaultProc).run();
     }
 
     @Test
     public void testAllClosedWithDefault()
     {
-        Runnable m4 = mock(Runnable.class);
         Stream.of(ch1, ch2, ch3).forEach(Channel::close);
-        assertThat(
-                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
-                        .isFalse();
-        verifyNoMoreInteractions(m4);
+        assertThat(Select
+                .withCase(ch1, proc1)
+                .withCase(ch2, proc2)
+                .withCase(ch3, proc3)
+                .withDefault(defaultProc)
+                .run()).isFalse();
     }
 
     @Test
     public void testAllButOneClosedWithDefault()
     {
-        Runnable m4 = mock(Runnable.class);
         Stream.of(ch1, ch3).forEach(Channel::close);
-        assertThat(
-                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
-                        .isTrue();
-        verify(m4).run();
-        verifyNoMoreInteractions(m4);
+        assertThat(Select
+                .withCase(ch1, proc1)
+                .withCase(ch2, proc2)
+                .withCase(ch3, proc3)
+                .withDefault(defaultProc)
+                .run()).isTrue();
+        verify(defaultProc).run();
     }
 
     @Test
     public void testValuePutIsNullNoDefault()
     {
-        ForkJoinPool.commonPool().execute(() -> ch2.put(null));
-        assertThat(Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).run()).isTrue();
-        verify(m2).accept(null);
+        ch2.put(null);
+        assertThat(Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, proc3).run())
+                .isTrue();
+        verify(proc2).accept(null);
     }
 
     @Test
     public void testValuePutIsNullWithDefault()
     {
-        Runnable m4 = mock(Runnable.class);
-        (ch2 = new Channel<>(1)).put(null);
-        assertThat(
-                Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).withDefault(m4).run())
-                        .isTrue();
-        verify(m2).accept(null);
-        verifyNoMoreInteractions(m4);
+        ch2.put(null);
+        assertThat(Select
+                .withCase(ch1, proc1)
+                .withCase(ch2, proc2)
+                .withCase(ch3, proc3)
+                .withDefault(defaultProc)
+                .run()).isTrue();
+        verify(proc2).accept(null);
     }
 
     @Test
     public void testRangeNoDefault()
     {
-        ForkJoinPool.commonPool().execute(() ->
-            {
-                ch1.put(41);
-                ch2.put(null);
-                ch1.put(422141);
-                ch3.put("Hello");
-                Stream.of(ch1, ch2, ch3).forEach(Channel::close);
-            });
-        Select.withCase(ch1, m1).withCase(ch2, m2).withCase(ch3, m3).range();
-        verify(m1).accept(41);
-        verify(m2).accept(null);
-        verify(m1).accept(422141);
-        verify(m3).accept("Hello");
+        ch1.put(41);
+        ch2.put(null);
+        ch1.put(422141);
+        ch3.put("Hello");
+        Stream.of(ch1, ch2, ch3).forEach(Channel::close);
+        List<Runnable> verifiers = new ArrayList<>();
+        doAnswer(invocation -> verifiers.add(() -> verify(proc1).accept(invocation.getArgument(0))))
+                .when(proc1)
+                .accept(anyInt());
+        doAnswer(invocation -> verifiers.add(() -> verify(proc2).accept(invocation.getArgument(0))))
+                .when(proc2)
+                .accept(any());
+        doAnswer(invocation -> verifiers.add(() -> verify(proc3).accept(invocation.getArgument(0))))
+                .when(proc3)
+                .accept(any());
+        Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, proc3).range();
+        verifiers.forEach(Runnable::run);
     }
 
     @Test
     public void testRangeWithDefault()
     {
-        (ch1 = new Channel<>(2)).put(41);
-        (ch2 = new Channel<>(1)).put(null);
+        ch1.put(41);
+        ch2.put(null);
         ch1.put(422141);
-        (ch3 = new Channel<>(1)).put("Hello");
-        Stream.of(ch1, ch2, ch3).forEach(Channel::close);
+        ch3.put("Hello");
         Select
-                .withCase(ch1, m1)
-                .withCase(ch2, m2)
-                .withCase(ch3, m3)
+                .withCase(ch1, proc1)
+                .withCase(ch2, proc2)
+                .withCase(ch3, proc3)
                 .withDefault(() -> Stream.of(ch1, ch2, ch3).forEach(Channel::close))
                 .range();
-        verify(m1).accept(41);
-        verify(m2).accept(null);
-        verify(m1).accept(422141);
-        verify(m3).accept("Hello");
+        verify(proc1).accept(41);
+        verify(proc2).accept(null);
+        verify(proc1).accept(422141);
+        verify(proc3).accept("Hello");
+    }
+
+    @Test
+    public void testRangeWithBreakExceptionNoDefault()
+    {
+        Stream.of(41, 422141).forEach(ch1::put);
+        Stream.of(null, false).forEach(ch2::put);
+        Stream.of("Hello", "Goodbye").forEach(ch3::put);
+        Stream.of(ch1, ch2, ch3).forEach(Channel::close);
+        List<Runnable> verifiers = new ArrayList<>();
+        doAnswer(invocation -> verifiers.add(() -> verify(proc1).accept(invocation.getArgument(0))))
+                .when(proc1)
+                .accept(anyInt());
+        doAnswer(invocation -> verifiers.add(() -> verify(proc2).accept(invocation.getArgument(0))))
+                .when(proc2)
+                .accept(any());
+        Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, v ->
+            {
+                if (v.equals("Hello"))
+                    throw new RangeBreakException();
+            }).range();
+        verifiers.forEach(Runnable::run);
+        assertThat(ch3.get().value).isEqualTo("Goodbye");
+    }
+
+    @Test
+    public void testRangeWithBreakExceptionAndDefault()
+    {
+        ch1.put(41);
+        ch2.put(null);
+        ch1.put(422141);
+        ch3.put("Hello");
+        ch2.put(false);
+        Stream.of(ch1, ch2, ch3).forEach(Channel::close);
+        Runnable m4 = mock(Runnable.class);
+        Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, v ->
+            {
+                throw new RangeBreakException();
+            }).withDefault(m4).range();
+        verify(proc1).accept(41);
+        verify(proc1).accept(422141);
+        verify(proc2).accept(null);
+        verify(proc2).accept(false);
     }
 }
