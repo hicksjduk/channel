@@ -4,14 +4,17 @@ import static uk.org.thehickses.locking.Locking.*;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Objects;
+import java.util.Spliterator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 /**
  * A class that emulates a channel in the Go language.
@@ -21,7 +24,7 @@ import java.util.stream.Stream;
  * @param <T>
  *            the type of the objects that the channel holds.
  */
-public class Channel<T>
+public class Channel<T> implements Iterable<T>
 {
     private final int bufferSize;
     private Status status = Status.OPEN;
@@ -208,7 +211,54 @@ public class Channel<T>
 
         boolean isComplete();
     }
+    
+    public Stream<T> stream()
+    {
+        return StreamSupport.stream(spliterator(), false);
+    }
 
+    @Override
+    public Iterator<T> iterator()
+    {
+        return stream().iterator();
+    }
+
+    @Override
+    public Spliterator<T> spliterator()
+    {
+        return new ChannelSpliterator();
+    }
+    
+    private class ChannelSpliterator implements Spliterator<T>
+    {
+        @Override
+        public boolean tryAdvance(Consumer<? super T> action)
+        {
+            GetResult<T> result = get();
+            if (result.containsValue)
+                action.accept(result.value);
+            return result.containsValue;
+        }
+
+        @Override
+        public Spliterator<T> trySplit()
+        {
+            return null;
+        }
+
+        @Override
+        public long estimateSize()
+        {
+            return doWithLock(lock, () -> status == Status.CLOSED ? putQueue.size() : Long.MAX_VALUE);
+        }
+
+        @Override
+        public int characteristics()
+        {
+            return CONCURRENT & ORDERED;
+        }
+    }
+    
     @FunctionalInterface
     static interface GetResponse<T>
     {

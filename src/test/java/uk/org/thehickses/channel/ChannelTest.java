@@ -5,10 +5,13 @@ import static org.assertj.core.api.Assertions.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
@@ -159,5 +162,33 @@ public class ChannelTest
         ch.put(null);
         ch.close();
         assertThat(ch.getNonBlocking().containsValue).isTrue();
+    }
+    
+    @Test
+    void testIterability()
+    {
+        Channel<Integer> ch = new Channel<>();
+        ForkJoinTask<?> task = ForkJoinTask.adapt(() -> {
+            IntStream.rangeClosed(1, 1000).forEach(ch::put);
+            ch.close();
+        });
+        ForkJoinPool.commonPool().execute(task);
+        for (int i : ch)
+            if (i == 500)
+                break;
+        assertThat(ch.get().value).isEqualTo(501);
+        task.cancel(true);
+    }
+    
+    @Test
+    void testStreamability()
+    {
+        Channel<Integer> ch = new Channel<>();
+        ForkJoinPool.commonPool().execute(() -> {
+            IntStream.rangeClosed(1, 1000).forEach(ch::put);
+            ch.close();
+        });
+        Optional<Integer> sum = ch.stream().reduce((a, b) -> a + b);
+        assertThat(sum.get()).isEqualTo(500500);
     }
 }
