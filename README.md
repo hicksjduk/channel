@@ -9,8 +9,10 @@ a Java emulation of the Go channel.
 ## Channel
 
 A channel is a first-in, first-out queue of data items of a particular type. 
-They are most frequently used for communication and co-ordination between concurrent routines, 
+Channels are most frequently used for communication and co-ordination between concurrent routines, 
 as they are thread-safe.
+
+### Reading from and and writing to a channel
 
 In this implementation, a routine writes a data item to the channel by calling its `put()` method.
 The channel has a maximum buffer size (which defaults to 0); any `put()` request which would
@@ -20,12 +22,14 @@ a buffer size of 0, this means that a `put()` will block until a matching `get()
 A routine reads from the channel by calling its `get()` method. This removes and returns the first
 item in the channel; if the channel is empty, the call blocks until there is something there or the channel
 is closed.
-In Go, which supports multiple return values from a call, reading from a channel returns both the value read, and a flag which says whether a value was actually read (which may not be the case if the channel was closed);
+In Go, which supports multiple return values from a call, reading from a channel returns both the value read, and a flag which says whether a value was actually read (which is not the case if the channel was closed and empty);
 this is simulated in Java by returning a `GetResult` object, in which there is a `containsValue` flag
 and a `value` which is only meaningful if `containsValue` is `true`.
 
-Go provides an easy way to read and process values from a channel using its `range` operator.
-This implementation likewise provides the `range()` method. You pass to this method a
+### Iterating over a channel
+
+Go provides an easy way to iterate over the values from a channel using its `range` operator.
+This implementation provides a way to simulate this via its `range()` method. You pass to this method a
 `Consumer` of the data type handled by the channel, and it repeatedly calls the channel's
 `get()` method, and passes each value retrieved to the specified `Consumer`, until the channel is
 closed. In a Go range statement, the iteration can be explicitly terminated by a `break`, `continue` or
@@ -33,19 +37,28 @@ closed. In a Go range statement, the iteration can be explicitly terminated by a
 happens in a separate routine; however, explicit termination can be achieved by throwing a
 `RangeBreakException` within the processing code.
 
-A channel can only be used for communication until it is closed, which is done by calling its
-`close()` method. Alternatively, the `closeWhenEmpty()` method can be used to
-denote that the channel should close automatically when all the values it contains have been
-consumed.
+However, this Java implementation also implements the `Iterable` interface, which means that it is possible to iterate over a channel using the Java `for (value : channel)` construct. This has the advantage that the `break`, `continue` and `return` statements can be used naturally. within
+the body of the `for` loop.
+
+A channel also provides a `stream()` method, which creates a `Stream` over the values retrieved from the channel.
+
+### Closing a channel
+
+A channel can only be written to until it is closed, which is done by calling its
+`close()` method.
 Closing a channel is often used
 to trigger a state change in the process which reads the channel (it should terminate, or 
-should move on to a different stage of its processing). 
+should move on to a different stage of its processing).
+ 
+Closing an already-closed channel has no effect; the `close()` method 
+returns a flag to indicate whether it actually closed the channel.
+
 Attempting to write to a closed channel
 has no effect; the `put()` method
 only puts the value if the channel is open, and returns a flag to indicate whether that was the case.
-Reading from a closed channel returns a result with `containsValue`
-set to false. Closing an already-closed channel has no effect; the `close()` method 
-returns a flag to indicate whether it actually closed the channel.
+
+The result of reading from a closed channel has `containsValue`
+set to `true` (and `value` to a meaningful value) if the channel was not empty, or to `false` if it was empty. 
 
 **Note** that in relation to closed channels, this implementation
 differs from Go in the following ways:
@@ -53,55 +66,65 @@ differs from Go in the following ways:
 is open via the `isOpen()` method.
 * It is not an error to write to or close a channel that is closed; the `put()` and `close()`
 methods have no effect on the channel if called on a closed channel, and return whether they
-actually changed the channel.
+actually changed the channel. (In Go, writing to or closing a closed channel causes a panic, which
+is how Go communicates that something has gone very wrong.)
+
+## Channel examples
 
 Some examples of Go code using channels, and their Java equivalents using this library:
 
 ### Create a channel
 
 **Go**
+
 ```go
 unbuffered := make(chan string)
 buffered := make(chan string, 20)
-``` 
+```
 
 **Java**
+
 ```java
 Channel<String> unbuffered = new Channel<>();
 Channel<String> buffered = new Channel<>(20);
-``` 
+```
 
 ### Read from a channel, check whether a value was read, and print it to stdout if so
 
 **Go**
+
 ```go
-if v, ok := <-ch; ok {
+if v, ok := <- ch; ok {
 	fmt.Println(v)
 }
-``` 
+```
 
 **Java**
+
 ```java
 GetResult<String> res = ch.get();
 if (res.containsValue) 
 	System.out.println(res.value);
-``` 
+```
 
 ### Write a value to a channel
 
 **Go**
+
 ```go
-ch<- value
-``` 
+ch <- value
+```
 
 **Java**
+
 ```java
 ch.put(value);
-``` 
+```
 
 ### Range over a channel (process values in turn until the channel is closed), terminating the iteration if the value is "stop"
 
 **Go**
+
 ```go
 for value := range ch {
 	// Process value
@@ -109,28 +132,51 @@ for value := range ch {
 		break
 	}
 }
-``` 
+```
 
 **Java**
+
+Using `range()`:
+
 ```java
 ch.range(value -> {
 	// Process value
 	if (value.equals("stop"))
 		throw new RangeBreakException();
 });
-``` 
+```
+ 
+Using a `for` loop:
+
+```java
+for (String value : ch) {
+	// Process value
+	if (value.equals("stop"))
+		break;
+}
+```
+
+Using a `Stream` (this example sums the elements read from a channel of `Integer`s using stream
+reduction):
+
+```java
+int sum = ch.stream().reduce((a, b) -> a + b);
+```
+
 
 ### Close a channel
 
 **Go**
+
 ```go
 close(ch)
-``` 
+```
 
 **Java**
+
 ```java
 ch.close();
-``` 
+```
 
 ## Select
 
@@ -145,6 +191,7 @@ An equivalent Java implementation of this is also provided in this package. Show
 statement and its Java equivalent:
 
 **Go**  
+
 ```go
 func doSelect(channelA chan int, channelB chan bool, channelC chan string) {
 	select {
@@ -161,6 +208,7 @@ func doSelect(channelA chan int, channelB chan bool, channelC chan string) {
 ```
 
 **Java**  
+
 ```java
 void doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<String> channelC)
 {
