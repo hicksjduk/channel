@@ -12,10 +12,10 @@ A channel is a first-in, first-out queue of data items of a particular type.
 Channels are most frequently used for communication and co-ordination between concurrent routines, 
 as they are thread-safe.
 
-### Reading from and and writing to a channel
+### Reading from and writing to a channel
 
-In this implementation, a routine writes a data item to the channel by calling its `put()` method.
-The channel has a maximum buffer size (which defaults to 0); any `put()` request which would
+A routine writes a data item to the channel by calling its `put()` method.
+The channel has a maximum buffer size (which defaults to 0 if not specified); any `put()` request which would
 exceed the buffer size blocks until there is enough space in the buffer. (In the case of
 a buffer size of 0, this means that a `put()` will block until a matching `get()` request is received.)
 
@@ -28,17 +28,17 @@ and a `value` which is only meaningful if `containsValue` is `true`.
 
 ### Iterating over a channel
 
-A channel implements the `Iterable` interface, which means that it is possible to iterate over a channel using the Java for-each loop.
+A channel implements the `Iterable` interface, which means that it is possible to iterate over a channel using the Java for-each loop. Unless terminated by a `break` or `return` statement, the iteration continues until the channel is closed and empty.
 
 A channel also provides a `stream()` method, which creates a `Stream` over the values retrieved from the channel.
 
 ### Closing a channel
 
-A channel can only be written to until it is closed, which is done by calling its
-`close()` method.
+A channel can only be written to while it is open. Closing the channel, which is done by calling its
+`close()` method, guarantees that no further values will be written to it.
 Closing a channel is often used
-to trigger a state change in the process which reads the channel (it should terminate, or 
-should move on to a different stage of its processing).
+to trigger a state change in the process which reads the channel - it should terminate, or 
+should move on to a different stage of its processing.
  
 Closing an already-closed channel has no effect; the `close()` method 
 returns a flag to indicate whether it actually closed the channel.
@@ -47,8 +47,9 @@ Attempting to write to a closed channel
 has no effect; the `put()` method
 only puts the value if the channel is open, and returns a flag to indicate whether that was the case.
 
-The result of reading from a closed channel has `containsValue`
-set to `true` (and `value` to a meaningful value) if the channel was not empty, or to `false` if it was empty. 
+Reading from a closed channel still returns a value if the channel is not empty.
+Reading from a closed channel that is empty does not block, but returns a result with `containsValue`
+set to `false`.
 
 **Note** that in relation to closed channels, this implementation
 differs from Go in the following ways:
@@ -111,7 +112,7 @@ ch <- value
 ch.put(value);
 ```
 
-### Iterate a channel until it is closed, or the value encountered is "stop"
+### Iterate over a channel until it is closed, or the value retrieved is "stop"
 
 **Go**
 
@@ -195,12 +196,12 @@ void doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<Stri
 ```
 
 **Note** that this implementation of the select differs from Go in how it behaves when all the selected
-channels are closed. In these circumstances, Go executes the handler for one of the cases, and which handler that is 
-is apparently chosen at random. The Java implementation executes no handler at all, not even the default handler
-if one is specified, and the `run()` method returns a boolean result - `true` if any case handler or the default
-handler was run, and `false` if none was run because all the channels are closed. 
-The execution of a random case 
-handler in Go is useful only in allowing the code to detect the case where all channels are closed, though since 
-the choice of handler is non-deterministic, all handlers must cater for that possibility. 
-I think it is arguable that the Java implementation presented here is an improvement as it separates the closure
-concern from the processing of values.
+channels are closed. In these circumstances, Go executes the handler for one of the cases, and which handler 
+to execute is apparently chosen at random. The Java implementation executes no handler at all, not even the
+default handler if one is specified, and the `run()` method returns a boolean result - `true` if any case
+handler or the default handler was run, and `false` if none was run because all the channels are closed. 
+
+The execution of a random case handler in Go is useful only in allowing the code to detect the case where
+all channels are closed, though since the choice of handler is non-deterministic, all handlers must cater
+for that possibility. I think it is arguable that the Java implementation presented here is an improvement 
+as it separates the closure concern from the processing of values.
