@@ -3,7 +3,6 @@ package uk.org.thehickses.channel;
 import static uk.org.thehickses.locking.Locking.*;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.Iterator;
@@ -68,16 +67,16 @@ public class Channel<T> implements Iterable<T>
         if (status == Status.CLOSED)
             return null;
         status = Status.CLOSED;
-        Collection<Request> blocked = new ArrayList<Request>();
+        Collection<Request> blockedRequests = new LinkedList<Request>();
         if (!getQueue.isEmpty())
         {
-            blocked.addAll(getQueue);
+            blockedRequests.addAll(getQueue);
             getQueue.clear();
         }
         else
-            for (int i = putQueue.size() - 1; i >= bufferSize; i--)
-                blocked.add(putQueue.remove(i));
-        return blocked.stream();
+            for (int size = putQueue.size(); size > bufferSize; size--)
+                blockedRequests.add(putQueue.removeLast());
+        return blockedRequests.stream();
     }
 
     /**
