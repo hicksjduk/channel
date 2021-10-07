@@ -56,13 +56,20 @@ public class Channel<T> implements Iterable<T>
      */
     public boolean close()
     {
-        Stream<Request> blockedRequests = doWithLock(lock, this::processClose);
+        Stream<Request> blockedRequests = doWithLock(lock, this::closeAndGetBlockedRequests);
         if (blockedRequests != null)
             blockedRequests.forEach(Request::setChannelClosed);
         return blockedRequests != null;
     }
 
-    private Stream<Request> processClose()
+    /**
+     * If the channel is open, closes it and returns a stream of all blocked requests if there are any. If it is already
+     * closes, returns a null stream.
+     * 
+     * @return a stream of blocked requests. May be null (the stream was already closed) or empty (there are no blocked
+     *         requests).
+     */
+    private Stream<Request> closeAndGetBlockedRequests()
     {
         if (status == Status.CLOSED)
             return null;
@@ -94,6 +101,9 @@ public class Channel<T> implements Iterable<T>
      * ahead of it in the put queue reduces to less than the channel's buffer size, or the value is used to satisfy a
      * get request.
      * 
+     * @param value
+     *            the value to put.
+     * 
      * @return whether the value was put. A value of false means that the channel was closed at the time the request was
      *         made, or became closed while the request was blocked.
      */
@@ -102,6 +112,14 @@ public class Channel<T> implements Iterable<T>
         return putRequest(value).response().result();
     }
 
+    /**
+     * Creates a put request, and if the channel is open adds it to the put queue and processes the queues to see if any
+     * blocked requests can be completed.
+     * 
+     * @param value
+     *            the value to put.
+     * @return the put request.
+     */
     private PutRequest<T> putRequest(T value)
     {
         PutRequest<T> request = new PutRequest<>(value);
@@ -133,11 +151,29 @@ public class Channel<T> implements Iterable<T>
         return get(null);
     }
 
+    /**
+     * Gets and removes a value from the channel, under the control of a {@link SelectController} supplied by the
+     * specified object.
+     * 
+     * @param selectControllerSupplier
+     *            the object that supplies a SelectController.
+     * @return the result. If the channel was closed, either at the time of the call or while the request was blocked,
+     *         {@link GetResult#containsValue} is false; otherwise {@link GetResult#containsValue} is true and
+     *         {@link GetResult#value} contains the value retrieved.
+     */
     GetResult<T> get(SelectControllerSupplier<T> selectControllerSupplier)
     {
         return getRequest(selectControllerSupplier).response().result();
     }
 
+    /**
+     * Creates a get request, and if the channel is open or not empty adds it to the get queue and processes the queues
+     * to see if any blocked requests can be completed.
+     * 
+     * @param selectControllerSupplier
+     *            a {@link SelectControllerSupplier}.
+     * @return the get request.
+     */
     private GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
         GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
@@ -154,6 +190,12 @@ public class Channel<T> implements Iterable<T>
         return request;
     }
 
+    /**
+     * Does a non-blocking get. This is the same as a standard get, except that if a get request would block (the
+     * channel is open and empty), a null result is returned.
+     * 
+     * @return the result of the get, or null if the channel is open and empty.
+     */
     GetResult<T> getNonBlocking()
     {
         return doWithLock(lock, () ->
@@ -164,6 +206,10 @@ public class Channel<T> implements Iterable<T>
             });
     }
 
+    /**
+     * Processes the get and put queues, until at least one of them is empty, completing as many blocked requests as
+     * possible.
+     */
     private void processQueues()
     {
         while (!getQueue.isEmpty() && !putQueue.isEmpty())
@@ -178,6 +224,13 @@ public class Channel<T> implements Iterable<T>
         }
     }
 
+    /**
+     * Cancels the specified get request, by removing it from the get queue and completing it with no value if it is
+     * blocked
+     * 
+     * @param request
+     *            the request
+     */
     void cancel(GetRequest<T> request)
     {
         if (request.isComplete())
@@ -289,6 +342,7 @@ public class Channel<T> implements Iterable<T>
             return selectController.select(this);
         }
 
+        @Override
         public boolean isComplete()
         {
             return responder.isDone();
