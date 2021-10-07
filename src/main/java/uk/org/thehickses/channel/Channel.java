@@ -14,13 +14,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-
-import javax.net.ssl.SSLEngineResult.Status;
-
-import org.omg.CORBA.Request;
 
 /**
  * A class that emulates a channel in the Go language.
