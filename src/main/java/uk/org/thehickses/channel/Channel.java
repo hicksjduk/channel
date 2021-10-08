@@ -13,6 +13,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -81,8 +82,9 @@ public class Channel<T> implements Iterable<T>
             getQueue.clear();
         }
         else
-            for (int size = putQueue.size(); size > bufferSize; size--)
-                blockedRequests.add(putQueue.removeLast());
+            IntStream
+                    .range(bufferSize, putQueue.size())
+                    .forEach(i -> blockedRequests.add(putQueue.removeLast()));
         return blockedRequests.stream();
     }
 
