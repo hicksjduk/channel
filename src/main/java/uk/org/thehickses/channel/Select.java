@@ -7,7 +7,6 @@ import java.util.Objects;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -24,7 +23,8 @@ public class Select
     public static <T> SelecterWithoutDefault withCase(Channel<T> channel,
             Consumer<? super T> processor)
     {
-        Stream.of(channel, processor).forEach(Objects::requireNonNull);
+        Stream.of(channel, processor)
+                .forEach(Objects::requireNonNull);
         return new SelecterWithoutDefault(new ChannelCase<>(channel, processor));
     }
 
@@ -57,7 +57,8 @@ public class Select
         public <T> SelecterWithoutDefault withCase(Channel<T> channel,
                 Consumer<? super T> processor)
         {
-            Stream.of(channel, processor).forEach(Objects::requireNonNull);
+            Stream.of(channel, processor)
+                    .forEach(Objects::requireNonNull);
             return new SelecterWithoutDefault(this, new ChannelCase<>(channel, processor));
         }
 
@@ -80,20 +81,13 @@ public class Select
         @Override
         public boolean run()
         {
-            int caseCount = cases.size();
             SelectGroup selectGroup = new SelectGroup();
-            Channel<Runnable> processorRunnerChannel = new Channel<>(caseCount);
+            Channel<Runnable> processorRunnerChannel = new Channel<>(1);
             cases.forEach(c -> c.runAsync(processorRunnerChannel, selectGroup));
-            Runnable processorRunner = IntStream
-                    .range(0, caseCount)
-                    .mapToObj(i -> processorRunnerChannel.get().value)
-                    .filter(Objects::nonNull)
+            return processorRunnerChannel.stream()
+                    .peek(r -> r.run())
                     .findFirst()
-                    .orElse(null);
-            if (processorRunner == null)
-                return false;
-            processorRunner.run();
-            return true;
+                    .isPresent();
         }
     }
 
@@ -123,11 +117,10 @@ public class Select
         public boolean run()
         {
             AtomicBoolean allClosed = new AtomicBoolean(true);
-            if (cases
-                    .stream()
+            if (cases.stream()
                     .map(ChannelCase::runSync)
                     .peek(res -> allClosed.compareAndSet(true, res == CaseResult.CHANNEL_CLOSED))
-                    .anyMatch(res -> res == CaseResult.VALUE_READ))
+                    .anyMatch(CaseResult.VALUE_READ::equals))
                 return true;
             if (allClosed.get())
                 return false;
@@ -167,7 +160,8 @@ public class Select
                 SelectGroup selectGroup)
         {
             CaseRunner<T> cr = new CaseRunner<>(this, processorRunnerChannel, selectGroup);
-            ForkJoinPool.commonPool().execute(cr);
+            ForkJoinPool.commonPool()
+                    .execute(cr);
             return cr;
         }
     }
@@ -177,6 +171,7 @@ public class Select
         private final Channel<T> channel;
         private final Consumer<? super T> processor;
         private final Channel<Runnable> processorRunnerChannel;
+        private final SelectGroup selectGroup;
         private final SelectControllerSupplier<T> selectControllerSupplier;
 
         public CaseRunner(ChannelCase<T> channelCase, Channel<Runnable> processorRunnerChannel,
@@ -185,6 +180,7 @@ public class Select
             this.channel = channelCase.channel;
             this.processor = channelCase.processor;
             this.processorRunnerChannel = processorRunnerChannel;
+            this.selectGroup = selectGroup;
             this.selectControllerSupplier = r -> selectGroup.addMember(channel, r);
         }
 
@@ -192,8 +188,10 @@ public class Select
         public void run()
         {
             GetResult<T> result = channel.get(selectControllerSupplier);
-            processorRunnerChannel
-                    .put(result.containsValue ? () -> processor.accept(result.value) : null);
+            if (result.containsValue)
+                processorRunnerChannel.put(() -> processor.accept(result.value));
+            if (result.containsValue || selectGroup.allResultsIn())
+                processorRunnerChannel.close();
         }
     }
 }
