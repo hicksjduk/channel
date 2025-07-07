@@ -23,8 +23,18 @@ A routine reads from the channel by calling its `get()` method. This removes and
 item in the channel; if the channel is empty, the call blocks until there is something there or the channel
 is closed.
 In Go, which supports multiple return values from a call, reading from a channel returns both the value read, and a flag which says whether a value was actually read (which is not the case if the channel was closed and empty);
-this is simulated in Java by returning a `GetResult` object, in which there is a `containsValue` flag
-and a `value` which is only meaningful if `containsValue` is `true`.
+this is simulated in Java by returning an `Optional` object, which contains the value read if there
+was one, or is empty otherwise. 
+
+**Note** that because of the implementation of the `Optional` class,
+which uses a contained `null` to denote emptiness, a channel cannot contain null values,
+and an attempt to put a null value in a channel will fail. 
+If it is
+desired to put null values in a channel, it is recommended to use an empty `Optional`.
+For example, if a channel is to contain values of type `String` which may be null, it should
+be declared as `Channel<Optional<String>>`, and a valid call to put a null value in that channel
+would be `ch.put(Optional.empty())`. If it is desired to create a channel where only the presence
+of an item, and not its value, is significant, this could be done by declaring the channel as `Channel<Optional<Void>>`, which can only contain empty `Optional`s.
 
 ### Iterating over a channel
 
@@ -48,8 +58,7 @@ has no effect; the `put()` method
 only puts the value if the channel is open, and returns a flag to indicate whether that was the case.
 
 Reading from a closed channel still returns a value if the channel is not empty.
-Reading from a closed channel that is empty does not block, but returns a result with `containsValue`
-set to `false`.
+Reading from a closed channel that is empty does not block, but returns an empty `Optional`.
 
 **Note** that in relation to closed channels, this implementation
 differs from Go in the following ways:
@@ -93,9 +102,7 @@ if v, ok := <- ch; ok {
 **Java**
 
 ```java
-GetResult<String> res = ch.get();
-if (res.containsValue) 
-	System.out.println(res.value);
+ch.get().ifPresent(System.out::println);
 ```
 
 ### Write a value to a channel
@@ -118,10 +125,10 @@ ch.put(value);
 
 ```go
 for value := range ch {
-	// Process value
 	if value == "stop" {
 		break
 	}
+	// Process value
 }
 ```
 
@@ -129,10 +136,17 @@ for value := range ch {
 
 ```java
 for (String value : ch) {
-	// Process value
 	if (value.equals("stop"))
 		break;
+	// Process value
 }
+```
+or
+
+```java
+ch.stream()
+	.takeWhile(Predicate.not("stop"::equals)
+	.forEach(value -> {// Process value});
 ```
 
 ### Close a channel
@@ -166,12 +180,18 @@ statement and its Java equivalent:
 ```go
 func doSelect(channelA chan int, channelB chan bool, channelC chan string) {
 	select {
-	case value := <-channelA:
-		// process value which is an int  
-	case value := <-channelB:
-		// process value which is a bool
-	case value := <-channelC:
-		// process value which is a string
+	case value, ok := <-channelA:
+		if ok {
+			// process value which is an int  
+		}
+	case value, ok := <-channelB:
+		if ok {
+			// process value which is a bool
+		}
+	case value, ok := <-channelC:
+		if ok {
+			// process value which is a string
+		}
 	default:
 		// do default processing
 	}
@@ -202,6 +222,8 @@ default handler if one is specified, and the `run()` method returns a boolean re
 handler or the default handler was run, and `false` if none was run because all the channels are closed. 
 
 The execution of a random case handler in Go is useful only in allowing the code to detect the case where
-all channels are closed, though since the choice of handler is non-deterministic, all handlers must cater
+all the channels are closed, since those are the only circumstances in which a handler is executed with
+no value available (`ok` set to false in the example above).
+However, since the choice of handler is non-deterministic, all handlers must cater
 for that possibility. I think it is arguable that the Java implementation presented here is an improvement 
 as it separates the closure concern from the processing of values.

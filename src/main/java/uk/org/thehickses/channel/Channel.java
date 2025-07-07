@@ -7,6 +7,8 @@ import java.util.Collection;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Spliterator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -18,7 +20,8 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 /**
- * A class that emulates a channel in the Go language.
+ * A class that emulates a channel in the Go language. Note that a channel may not hold null values; if it is desired to
+ * put nulls in a channel, it is recommended to wrap them in an {@link Optional Optional}.
  * 
  * @author Jeremy Hicks
  *
@@ -51,7 +54,8 @@ public class Channel<T> implements Iterable<T>
 
     /**
      * If the channel is not already closed, closes the channel and signals all blocked requests that it is closed.
-     * Completed put requests remain in the put queue and remain available for retrieval.
+     * Completed put requests remain in the put queue and available for retrieval. Blocked put requests complete, but do
+     * not put their values in the channel.
      * 
      * @return whether this call closed the channel. A return value of false means that the channel was already closed.
      */
@@ -82,8 +86,7 @@ public class Channel<T> implements Iterable<T>
             getQueue.clear();
         }
         else
-            IntStream
-                    .range(bufferSize, putQueue.size())
+            IntStream.range(bufferSize, putQueue.size())
                     .forEach(i -> blockedRequests.add(putQueue.removeLast()));
         return blockedRequests.stream();
     }
@@ -104,14 +107,16 @@ public class Channel<T> implements Iterable<T>
      * get request.
      * 
      * @param value
-     *            the value to put.
+     *            the value to put. May not be null.
      * 
      * @return whether the value was put. A value of false means that the channel was closed at the time the request was
      *         made, or became closed while the request was blocked.
      */
     public boolean put(T value)
     {
-        return putRequest(value).response().result();
+        Objects.requireNonNull(value);
+        return putRequest(value).response()
+                .result();
     }
 
     /**
@@ -145,10 +150,9 @@ public class Channel<T> implements Iterable<T>
      * until a value becomes available.
      * 
      * @return the result. If the channel was closed, either at the time of the call or while the request was blocked,
-     *         {@link GetResult#containsValue} is false; otherwise {@link GetResult#containsValue} is true and
-     *         {@link GetResult#value} contains the value retrieved.
+     *         the result is empty; otherwise it contains the value retrieved.
      */
-    public GetResult<T> get()
+    public Optional<T> get()
     {
         return get(null);
     }
@@ -160,12 +164,12 @@ public class Channel<T> implements Iterable<T>
      * @param selectControllerSupplier
      *            the object that supplies a SelectController.
      * @return the result. If the channel was closed, either at the time of the call or while the request was blocked,
-     *         {@link GetResult#containsValue} is false; otherwise {@link GetResult#containsValue} is true and
-     *         {@link GetResult#value} contains the value retrieved.
+     *         the result is empty; otherwise it contains the value retrieved.
      */
-    GetResult<T> get(SelectControllerSupplier<T> selectControllerSupplier)
+    Optional<T> get(SelectControllerSupplier<T> selectControllerSupplier)
     {
-        return getRequest(selectControllerSupplier).response().result();
+        return getRequest(selectControllerSupplier).response()
+                .result();
     }
 
     /**
@@ -198,12 +202,12 @@ public class Channel<T> implements Iterable<T>
      * 
      * @return the result of the get, or null if the channel is open and empty.
      */
-    GetResult<T> getNonBlocking()
+    Optional<T> getNonBlocking()
     {
         return doWithLock(lock, () ->
             {
                 if (putQueue.isEmpty())
-                    return isOpen() ? null : new GetResult<>();
+                    return isOpen() ? null : Optional.empty();
                 return get();
             });
     }
@@ -220,7 +224,8 @@ public class Channel<T> implements Iterable<T>
             if (!getRequest.isSelectable())
                 continue;
             if (putQueue.size() > bufferSize)
-                putQueue.get(bufferSize).setCompleted();
+                putQueue.get(bufferSize)
+                        .setCompleted();
             PutRequest<T> putRequest = putQueue.pop();
             getRequest.setReturnedValue(putRequest.value);
         }
@@ -268,10 +273,12 @@ public class Channel<T> implements Iterable<T>
         @Override
         public boolean tryAdvance(Consumer<? super T> action)
         {
-            GetResult<T> result = get();
-            if (result.containsValue)
-                action.accept(result.value);
-            return result.containsValue;
+            return get().map(v ->
+                {
+                    action.accept(v);
+                    return true;
+                })
+                    .orElse(false);
         }
 
         @Override
@@ -304,7 +311,7 @@ public class Channel<T> implements Iterable<T>
     @FunctionalInterface
     static interface GetResponse<T>
     {
-        GetResult<T> result();
+        Optional<T> result();
     }
 
     @FunctionalInterface
@@ -320,7 +327,9 @@ public class Channel<T> implements Iterable<T>
 
         public GetRequest(SelectControllerSupplier<T> supplier)
         {
-            this.selectController = supplier == null ? r -> true : supplier.apply(this);
+            this.selectController = Optional.ofNullable(supplier)
+                    .map(s -> s.apply(this))
+                    .orElse(r -> true);
         }
 
         @Override
@@ -331,12 +340,12 @@ public class Channel<T> implements Iterable<T>
 
         public void setNoValue()
         {
-            responder.complete(() -> new GetResult<>());
+            responder.complete(Optional::empty);
         }
 
         public void setReturnedValue(T value)
         {
-            responder.complete(() -> new GetResult<>(value));
+            responder.complete(() -> Optional.of(value));
         }
 
         public boolean isSelectable()

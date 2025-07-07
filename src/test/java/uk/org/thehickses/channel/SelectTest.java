@@ -158,26 +158,4 @@ public class SelectTest
                 .run()).isTrue();
         verify(defaultProc).run();
     }
-
-    @Test
-    public void testValuePutIsNullNoDefault()
-    {
-        ch2.put(null);
-        assertThat(Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, proc3).run())
-                .isTrue();
-        verify(proc2).accept(null);
-    }
-
-    @Test
-    public void testValuePutIsNullWithDefault()
-    {
-        ch2.put(null);
-        assertThat(Select
-                .withCase(ch1, proc1)
-                .withCase(ch2, proc2)
-                .withCase(ch3, proc3)
-                .withDefault(defaultProc)
-                .run()).isTrue();
-        verify(proc2).accept(null);
-    }
 }

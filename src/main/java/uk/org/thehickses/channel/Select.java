@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -147,13 +148,14 @@ public class Select
 
         public CaseResult runSync()
         {
-            GetResult<T> result = channel.getNonBlocking();
-            if (result == null)
-                return CaseResult.NO_VALUE_AVAILABLE;
-            if (!result.containsValue)
-                return CaseResult.CHANNEL_CLOSED;
-            processor.accept(result.value);
-            return CaseResult.VALUE_READ;
+            return Optional.ofNullable(channel.getNonBlocking())
+                    .map(o -> o.map(v ->
+                        {
+                            processor.accept(v);
+                            return CaseResult.VALUE_READ;
+                        })
+                            .orElse(CaseResult.CHANNEL_CLOSED))
+                    .orElse(CaseResult.NO_VALUE_AVAILABLE);
         }
 
         public CaseRunner<T> runAsync(Channel<Runnable> processorRunnerChannel,
@@ -187,10 +189,13 @@ public class Select
         @Override
         public void run()
         {
-            GetResult<T> result = channel.get(selectControllerSupplier);
-            if (result.containsValue)
-                processorRunnerChannel.put(() -> processor.accept(result.value));
-            if (result.containsValue || selectGroup.allResultsIn())
+            if (channel.get(selectControllerSupplier)
+                    .map(v ->
+                        {
+                            processorRunnerChannel.put(() -> processor.accept(v));
+                            return true;
+                        })
+                    .orElse(selectGroup.allResultsIn()))
                 processorRunnerChannel.close();
         }
     }
