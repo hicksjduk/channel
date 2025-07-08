@@ -5,7 +5,6 @@ import static org.junit.jupiter.params.provider.Arguments.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
@@ -31,17 +30,17 @@ public class ChannelTest
     @MethodSource
     void testChannel(int supplierThreads)
     {
-        Channel<Integer> channel = new Channel<>();
-        Channel<Integer> putsAndGets = new Channel<>(supplierThreads + 1);
-        AtomicInteger putCount = new AtomicInteger();
-        int valueCount = 2000;
+        var channel = new Channel<Integer>();
+        var putsAndGets = new Channel<Integer>(supplierThreads + 1);
+        var putCount = new AtomicInteger();
+        var valueCount = 2000;
         for (int i = 0; i < supplierThreads; i++)
         {
-            int t = i;
+            var t = i;
             Runnable putter = () ->
                 {
-                    int count = 0;
-                    for (int v = t; v < valueCount; v += supplierThreads)
+                    var count = 0;
+                    for (var v = t; v < valueCount; v += supplierThreads)
                     {
                         channel.put(v);
                         count++;
@@ -52,10 +51,10 @@ public class ChannelTest
             ForkJoinPool.commonPool()
                     .execute(putter);
         }
-        List<Integer> values = new ArrayList<Integer>();
+        var values = new ArrayList<Integer>();
         Runnable reader = () ->
             {
-                for (Integer v : channel)
+                for (var v : channel)
                 {
                     values.add(v);
                     putsAndGets.put(-1);
@@ -63,10 +62,10 @@ public class ChannelTest
             };
         ForkJoinPool.commonPool()
                 .execute(reader);
-        int outstandingValueCount = Integer.MIN_VALUE;
+        var outstandingValueCount = Integer.MIN_VALUE;
         while (outstandingValueCount != 0)
         {
-            Optional<Integer> result = putsAndGets.get();
+            var result = putsAndGets.get();
             if (outstandingValueCount == Integer.MIN_VALUE)
                 outstandingValueCount = result.get();
             else
@@ -76,14 +75,14 @@ public class ChannelTest
         assertThat(values.size()).isEqualTo(valueCount);
         assertThat(putCount.get()).isEqualTo(valueCount);
         Collections.sort(values);
-        for (int i = 0; i < valueCount; i++)
+        for (var i = 0; i < valueCount; i++)
             assertThat(values.get(i)).isEqualTo(i);
     }
 
     @Test
     public void testDoubleClose()
     {
-        Channel<Void> ch = new Channel<>();
+        var ch = new Channel<>();
         assertThat(ch.close()).isTrue();
         assertThat(ch.close()).isFalse();
     }
@@ -91,7 +90,7 @@ public class ChannelTest
     @Test
     public void testCloseBeforePut()
     {
-        Channel<Integer> ch = new Channel<>();
+        var ch = new Channel<>();
         ch.close();
         assertThat(ch.put(1)).isFalse();
     }
@@ -111,8 +110,8 @@ public class ChannelTest
     private void testCloseAfterPut(int bufferSize, Function<Channel<Integer>, Boolean> putter,
             boolean expectedResult)
     {
-        Channel<Integer> ch = new Channel<>(bufferSize);
-        Channel<Optional<Void>> done = new Channel<>(1);
+        var ch = new Channel<Integer>(bufferSize);
+        var done = new Channel<>(1);
         Runnable closer = () ->
             {
                 try
@@ -144,14 +143,14 @@ public class ChannelTest
     @Test
     void testGetNonBlockingChannelOpenAndEmpty()
     {
-        Channel<Void> ch = new Channel<>(1);
+        var ch = new Channel<>(1);
         assertThat(ch.getNonBlocking()).isNull();
     }
 
     @Test
     void testGetNonBlockingChannelOpenAndNotEmpty()
     {
-        Channel<Optional<Void>> ch = new Channel<>(1);
+        var ch = new Channel<>(1);
         ch.put(Optional.empty());
         assertThat(ch.getNonBlocking()).isNotEmpty();
     }
@@ -159,7 +158,7 @@ public class ChannelTest
     @Test
     void testGetNonBlockingChannelClosedAndEmpty()
     {
-        Channel<Optional<Void>> ch = new Channel<>(1);
+        var ch = new Channel<>(1);
         ch.close();
         assertThat(ch.getNonBlocking()).isEmpty();
     }
@@ -167,7 +166,7 @@ public class ChannelTest
     @Test
     void testGetNonBlockingChannelClosedAndNotEmpty()
     {
-        Channel<Optional<Void>> ch = new Channel<>(1);
+        var ch = new Channel<>(1);
         ch.put(Optional.empty());
         ch.close();
         assertThat(ch.getNonBlocking()).isNotEmpty();
@@ -176,8 +175,8 @@ public class ChannelTest
     @Test
     void testIterability()
     {
-        Channel<Integer> ch = new Channel<>();
-        ForkJoinTask<?> task = ForkJoinTask.adapt(() ->
+        var ch = new Channel<Integer>();
+        var task = ForkJoinTask.adapt(() ->
             {
                 IntStream.rangeClosed(1, 1000)
                         .forEach(ch::put);
@@ -185,7 +184,7 @@ public class ChannelTest
             });
         ForkJoinPool.commonPool()
                 .execute(task);
-        for (int i : ch)
+        for (var i : ch)
             if (i == 500)
                 break;
         assertThat(ch.get()).contains(501);
@@ -195,7 +194,7 @@ public class ChannelTest
     @Test
     void testStreamability()
     {
-        Channel<Integer> ch = new Channel<>();
+        var ch = new Channel<Integer>();
         ForkJoinPool.commonPool()
                 .execute(() ->
                     {
@@ -203,7 +202,7 @@ public class ChannelTest
                                 .forEach(ch::put);
                         ch.close();
                     });
-        Optional<Integer> sum = ch.stream()
+        var sum = ch.stream()
                 .reduce((a, b) -> a + b);
         assertThat(sum.get()).isEqualTo(500500);
     }

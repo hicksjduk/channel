@@ -61,7 +61,7 @@ public class Channel<T> implements Iterable<T>
      */
     public boolean close()
     {
-        Stream<Request> blockedRequests = doWithLock(lock, this::closeAndGetBlockedRequests);
+        var blockedRequests = doWithLock(lock, this::closeAndGetBlockedRequests);
         if (blockedRequests != null)
             blockedRequests.forEach(Request::setChannelClosed);
         return blockedRequests != null;
@@ -79,7 +79,7 @@ public class Channel<T> implements Iterable<T>
         if (status == Status.CLOSED)
             return null;
         status = Status.CLOSED;
-        Collection<Request> blockedRequests = new LinkedList<Request>();
+        var blockedRequests = new LinkedList<Request>();
         if (!getQueue.isEmpty())
         {
             blockedRequests.addAll(getQueue);
@@ -128,7 +128,7 @@ public class Channel<T> implements Iterable<T>
      */
     private PutRequest<T> putRequest(T value)
     {
-        PutRequest<T> request = new PutRequest<>(value);
+        var request = new PutRequest<>(value);
         doWithLock(lock, () ->
             {
                 if (!isOpen())
@@ -180,7 +180,7 @@ public class Channel<T> implements Iterable<T>
      */
     private GetRequest<T> getRequest(SelectControllerSupplier<T> selectControllerSupplier)
     {
-        GetRequest<T> request = new GetRequest<>(selectControllerSupplier);
+        var request = new GetRequest<>(selectControllerSupplier);
         doWithLock(lock, () ->
             {
                 if (!isOpen() && putQueue.isEmpty())
@@ -218,13 +218,13 @@ public class Channel<T> implements Iterable<T>
     {
         while (!getQueue.isEmpty() && !putQueue.isEmpty())
         {
-            GetRequest<T> getRequest = getQueue.pop();
+            var getRequest = getQueue.pop();
             if (!getRequest.isSelectable())
                 continue;
             if (putQueue.size() > bufferSize)
                 putQueue.get(bufferSize)
                         .setCompleted();
-            PutRequest<T> putRequest = putQueue.pop();
+            var putRequest = putQueue.pop();
             getRequest.setReturnedValue(putRequest.value);
         }
     }

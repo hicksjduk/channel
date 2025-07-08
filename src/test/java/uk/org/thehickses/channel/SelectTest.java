@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -64,7 +63,7 @@ public class SelectTest
         ch1.put(981);
         ch2.put(false);
         ch3.put("Hej");
-        List<Runnable> verifiers = new ArrayList<>();
+        var verifiers = new ArrayList<Runnable>();
         doAnswer(invocation -> verifiers.add(() -> verify(proc1).accept(invocation.getArgument(0))))
                 .when(proc1)
                 .accept(anyInt());
@@ -87,8 +86,8 @@ public class SelectTest
         ch1.put(981);
         ch2.put(false);
         ch3.put("Hej");
-        Selecter select = Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, proc3);
-        for (int count = 0; count < 4; count++)
+        var select = Select.withCase(ch1, proc1).withCase(ch2, proc2).withCase(ch3, proc3);
+        for (var count = 0; count < 4; count++)
             assertThat(select.run()).isTrue();
         verify(proc1).accept(981);
         verify(proc2).accept(false);

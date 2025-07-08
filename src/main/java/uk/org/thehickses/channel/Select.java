@@ -82,8 +82,8 @@ public class Select
         @Override
         public boolean run()
         {
-            SelectGroup selectGroup = new SelectGroup();
-            Channel<Runnable> processorRunnerChannel = new Channel<>(1);
+            var selectGroup = new SelectGroup();
+            var processorRunnerChannel = new Channel<Runnable>(1);
             cases.forEach(c -> c.runAsync(processorRunnerChannel, selectGroup));
             return processorRunnerChannel.stream()
                     .peek(r -> r.run())
@@ -117,7 +117,7 @@ public class Select
         @Override
         public boolean run()
         {
-            AtomicBoolean allClosed = new AtomicBoolean(true);
+            var allClosed = new AtomicBoolean(true);
             if (cases.stream()
                     .map(ChannelCase::runSync)
                     .peek(res -> allClosed.compareAndSet(true, res == CaseResult.CHANNEL_CLOSED))
@@ -161,7 +161,7 @@ public class Select
         public CaseRunner<T> runAsync(Channel<Runnable> processorRunnerChannel,
                 SelectGroup selectGroup)
         {
-            CaseRunner<T> cr = new CaseRunner<>(this, processorRunnerChannel, selectGroup);
+            var cr = new CaseRunner<>(this, processorRunnerChannel, selectGroup);
             ForkJoinPool.commonPool()
                     .execute(cr);
             return cr;
