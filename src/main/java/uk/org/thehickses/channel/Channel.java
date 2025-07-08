@@ -115,8 +115,7 @@ public class Channel<T> implements Iterable<T>
     public boolean put(T value)
     {
         Objects.requireNonNull(value);
-        return putRequest(value).response()
-                .result();
+        return putRequest(value).result();
     }
 
     /**
@@ -168,8 +167,7 @@ public class Channel<T> implements Iterable<T>
      */
     Optional<T> get(SelectControllerSupplier<T> selectControllerSupplier)
     {
-        return getRequest(selectControllerSupplier).response()
-                .result();
+        return getRequest(selectControllerSupplier).result();
     }
 
     /**
@@ -308,21 +306,26 @@ public class Channel<T> implements Iterable<T>
         boolean isComplete();
     }
 
-    @FunctionalInterface
-    static interface GetResponse<T>
+    private static <T> T getResult(CompletableFuture<T> cf)
     {
-        Optional<T> result();
-    }
-
-    @FunctionalInterface
-    private static interface PutResponse
-    {
-        boolean result();
+        while (true)
+            try
+            {
+                return cf.get();
+            }
+            catch (InterruptedException e)
+            {
+                continue;
+            }
+            catch (ExecutionException e)
+            {
+                throw new RuntimeException(e);
+            }
     }
 
     static class GetRequest<T> implements Request
     {
-        private final CompletableFuture<GetResponse<T>> responder = new CompletableFuture<>();
+        private final CompletableFuture<Optional<T>> result = new CompletableFuture<>();
         private final SelectController selectController;
 
         public GetRequest(SelectControllerSupplier<T> supplier)
@@ -340,12 +343,12 @@ public class Channel<T> implements Iterable<T>
 
         public void setNoValue()
         {
-            responder.complete(Optional::empty);
+            result.complete(Optional.empty());
         }
 
         public void setReturnedValue(T value)
         {
-            responder.complete(() -> Optional.of(value));
+            result.complete(Optional.of(value));
         }
 
         public boolean isSelectable()
@@ -356,31 +359,19 @@ public class Channel<T> implements Iterable<T>
         @Override
         public boolean isComplete()
         {
-            return responder.isDone();
+            return result.isDone();
         }
 
-        public GetResponse<T> response()
+        public Optional<T> result()
         {
-            while (true)
-                try
-                {
-                    return responder.get();
-                }
-                catch (InterruptedException e)
-                {
-                    continue;
-                }
-                catch (ExecutionException e)
-                {
-                    throw new RuntimeException(e);
-                }
+            return getResult(result);
         }
     }
 
     private static class PutRequest<T> implements Request
     {
         public final T value;
-        private final CompletableFuture<PutResponse> responder = new CompletableFuture<>();
+        private final CompletableFuture<Boolean> result = new CompletableFuture<>();
 
         public PutRequest(T value)
         {
@@ -390,35 +381,23 @@ public class Channel<T> implements Iterable<T>
         @Override
         public void setChannelClosed()
         {
-            responder.complete(() -> false);
+            result.complete(false);
         }
 
         @Override
         public boolean isComplete()
         {
-            return responder.isDone();
+            return result.isDone();
         }
 
         public void setCompleted()
         {
-            responder.complete(() -> true);
+            result.complete(true);
         }
 
-        public PutResponse response()
+        public boolean result()
         {
-            while (true)
-                try
-                {
-                    return responder.get();
-                }
-                catch (InterruptedException e)
-                {
-                    continue;
-                }
-                catch (ExecutionException e)
-                {
-                    throw new RuntimeException(e);
-                }
+            return getResult(result);
         }
     }
 
