@@ -34,7 +34,7 @@ desired to put null values in a channel, it is recommended to use an empty `Opti
 For example, if a channel is to contain values of type `String` which may be null, it should
 be declared as `Channel<Optional<String>>`, and a valid call to put a null value in that channel
 would be `ch.put(Optional.empty())`. If it is desired to create a channel where only the presence
-of an item, and not its value, is significant, this could be done by declaring the channel as `Channel<Optional<Void>>`, which can only contain empty `Optional`s.
+of an item, and not its value, is significant, this could be done by declaring the channel as `Channel<>` (equivalent to `Channel<Object>`), which can contain objects of any type.
 
 ### Iterating over a channel
 
@@ -85,8 +85,8 @@ buffered := make(chan string, 20)
 **Java**
 
 ```java
-Channel<String> unbuffered = new Channel<>();
-Channel<String> buffered = new Channel<>(20);
+var unbuffered = new Channel<String>();
+var buffered = new Channel<String>(20);
 ```
 
 ### Read from a channel, check whether a value was read, and print it to stdout if so
@@ -135,7 +135,7 @@ for value := range ch {
 **Java**
 
 ```java
-for (String value : ch) {
+for (var value : ch) {
 	if (value.equals("stop"))
 		break;
 	// Process value
@@ -166,44 +166,49 @@ ch.close();
 ## Select
 
 Go provides a special `select` statement which allows for multiple channels to be read
-at the same time; whenever a value is read from any of the specified channels, it is processed and
+at the same time; as soon as a value is read from any of the specified channels, it is processed and
 the select completes. The select may also optionally have a `default` clause, in which
 case the `default` clause is executed, and the select completes, even if none of the specified channels
 has an available value. Without a `default` clause, the select blocks until a value is available on one
 of the channels, or all the channels are closed.
 
 An equivalent Java implementation of this is also provided in this package. Shown below are a Go `select`
-statement and its Java equivalent:
+statement and its Java equivalent; in each example, the select is wrapped in a function which returns
+true unless all the specified channels are closed.
 
 **Go**  
 
 ```go
-func doSelect(channelA chan int, channelB chan bool, channelC chan string) {
+func doSelect(channelA chan int, channelB chan bool, channelC chan string) bool {
 	select {
 	case value, ok := <-channelA:
 		if ok {
 			// process value which is an int  
 		}
+		return ok
 	case value, ok := <-channelB:
 		if ok {
 			// process value which is a bool
 		}
+		return ok
 	case value, ok := <-channelC:
 		if ok {
 			// process value which is a string
 		}
+		return ok
 	default:
 		// do default processing
 	}
+	return true
 }
 ```
 
 **Java**  
 
 ```java
-void doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<String> channelC)
+boolean doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<String> channelC)
 {
-	Select.withCase(channelA, value -> {
+	return Select.withCase(channelA, value -> {
 		// process value which is an Integer  
 	}).withCase(channelB, value -> {
 		// process value which is a Boolean  
