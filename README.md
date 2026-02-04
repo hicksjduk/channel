@@ -32,15 +32,18 @@ and an attempt to put a null value in a channel will fail.
 If it is
 desired to put null values in a channel, it is recommended to use an empty `Optional`.
 For example, if a channel is to contain values of type `String` which may be null, it should
-be declared as `Channel<Optional<String>>`, and a valid call to put a null value in that channel
-would be `ch.put(Optional.empty())`. If it is desired to create a channel where only the presence
-of an item, and not its value, is significant, this could be done by declaring the channel as `Channel<>` (equivalent to `Channel<Object>`), which can contain objects of any type.
+be declared as `Channel<Optional<String>>`, and a valid call to put a null `String` 
+in that channel
+would be `ch.put(Optional.empty());`.
 
 ### Iterating over a channel
 
-A channel implements the `Iterable` interface, which means that it is possible to iterate over a channel using the Java for-each loop. Unless terminated by a `break` or `return` statement, the iteration continues until the channel is closed and empty.
+A channel implements the `Iterable` interface, which means that it is possible to iterate over a
+channel using a Java for-each loop. Unless terminated by a `break` or `return` statement, the 
+iteration continues until the channel is closed and empty.
 
-A channel also provides a `stream()` method, which creates a `Stream` over the values retrieved from the channel.
+A channel also provides a `stream()` method, which creates a `Stream` over the values retrieved from 
+the channel.
 
 ### Closing a channel
 
@@ -63,9 +66,9 @@ Reading from a closed channel that is empty does not block, but returns an empty
 **Note** that in relation to closed channels, this implementation
 differs from Go in the following ways:
 * You can query whether a channel
-is open via the `isOpen()` method.
+is open: call the `isOpen()` method.
 * It is not an error to write to or close a channel that is closed; the `put()` and `close()`
-methods have no effect on the channel if called on a closed channel, and return whether they
+methods have no effect if called on a closed channel, and return whether they
 actually changed the channel. (In Go, writing to or closing a closed channel causes a panic, which
 is how Go communicates that something has gone very wrong.)
 
@@ -111,12 +114,14 @@ ch.get().ifPresent(System.out::println);
 
 ```go
 ch <- value
+// Causes a panic if ch is closed
 ```
 
 **Java**
 
 ```java
 ch.put(value);
+// Returns false if ch is closed
 ```
 
 ### Iterate over a channel until it is closed, or the value retrieved is "stop"
@@ -155,12 +160,14 @@ ch.stream()
 
 ```go
 close(ch)
+// Causes a panic if ch is already closed
 ```
 
 **Java**
 
 ```java
 ch.close();
+// Returns false if ch is already closed
 ```
 
 ## Select
@@ -172,7 +179,8 @@ case the `default` clause is executed, and the select completes, even if none of
 has an available value. Without a `default` clause, the select blocks until a value is available on one
 of the channels, or all the channels are closed.
 
-An equivalent Java implementation of this is also provided in this package. Shown below are a Go `select`
+An equivalent Java implementation of this is also provided in this package. Shown below are a 
+Go `select`
 statement and its Java equivalent; in each example, the select is wrapped in a function which returns
 true unless all the specified channels are closed.
 
@@ -221,14 +229,17 @@ boolean doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<S
 ```
 
 **Note** that this implementation of the select differs from Go in how it behaves when all the selected
-channels are closed. In these circumstances, Go executes the handler for one of the cases, and which handler 
-to execute is apparently chosen at random. The Java implementation executes no handler at all, not even the
-default handler if one is specified, and the `run()` method returns a boolean result - `true` if any case
-handler or the default handler was run, and `false` if none was run because all the channels are closed. 
+channels are closed. In these circumstances, Go executes the handler for one of the cases, and which 
+handler to execute is apparently chosen at random. The Java implementation executes no handler at all, 
+not even the default handler if one is specified, and the `run()` method returns a boolean result - 
+`true` if any case
+handler or the default handler was run, and `false` if none was run because all the channels are 
+closed. 
 
 The execution of a random case handler in Go is useful only in allowing the code to detect the case where
 all the channels are closed, since those are the only circumstances in which a handler is executed with
 no value available (`ok` set to false in the example above).
 However, since the choice of handler is non-deterministic, all handlers must cater
-for that possibility. I think it is arguable that the Java implementation presented here is an improvement 
+for that possibility. I think it is arguable that the Java implementation presented here is an 
+improvement, 
 as it separates the closure concern from the processing of values.
