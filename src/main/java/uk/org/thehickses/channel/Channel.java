@@ -204,8 +204,8 @@ public class Channel<T> implements Iterable<T>
     {
         return doWithLock(lock, () ->
             {
-                if (putQueue.isEmpty())
-                    return isOpen() ? null : Optional.empty();
+                if (putQueue.isEmpty() && isOpen())
+                    return null;
                 return get();
             });
     }
