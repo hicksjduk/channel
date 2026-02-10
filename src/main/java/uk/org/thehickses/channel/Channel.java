@@ -3,7 +3,6 @@ package uk.org.thehickses.channel;
 import static uk.org.thehickses.locking.Locking.*;
 
 import java.util.ArrayDeque;
-import java.util.Collection;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -74,18 +73,17 @@ public class Channel<T> implements Iterable<T>
      * @return a stream of blocked requests. May be null (the stream was already closed) or empty (there are no blocked
      *         requests).
      */
-    private Stream<Request> closeAndGetBlockedRequests()
+    private Stream<? extends Request> closeAndGetBlockedRequests()
     {
         if (status == Status.CLOSED)
             return null;
         status = Status.CLOSED;
-        var blockedRequests = new LinkedList<Request>();
         if (!getQueue.isEmpty())
-            blockedRequests.addAll(getQueue);
-        else
-            IntStream.range(bufferSize, putQueue.size())
-                    .forEach(i -> blockedRequests.add(putQueue.removeLast()));
-        return blockedRequests.stream();
+            return getQueue.stream();
+        var sb = Stream.<PutRequest<T>> builder();
+        IntStream.range(bufferSize, putQueue.size())
+                .forEach(i -> sb.add(putQueue.removeLast()));
+        return sb.build();
     }
 
     /**
