@@ -81,10 +81,7 @@ public class Channel<T> implements Iterable<T>
         status = Status.CLOSED;
         var blockedRequests = new LinkedList<Request>();
         if (!getQueue.isEmpty())
-        {
             blockedRequests.addAll(getQueue);
-            getQueue.clear();
-        }
         else
             IntStream.range(bufferSize, putQueue.size())
                     .forEach(i -> blockedRequests.add(putQueue.removeLast()));
