@@ -68,7 +68,7 @@ public class Channel<T> implements Iterable<T>
 
     /**
      * If the channel is open, closes it and returns a stream of all blocked requests if there are any. If it is already
-     * closes, returns a null stream.
+     * closed, returns a null stream.
      * 
      * @return a stream of blocked requests. May be null (the stream was already closed) or empty (there are no blocked
      *         requests).
@@ -80,10 +80,10 @@ public class Channel<T> implements Iterable<T>
         status = Status.CLOSED;
         if (!getQueue.isEmpty())
             return getQueue.stream();
-        var sb = Stream.<PutRequest<T>> builder();
-        IntStream.range(bufferSize, putQueue.size())
-                .forEach(i -> sb.add(putQueue.removeLast()));
-        return sb.build();
+        return IntStream.range(bufferSize, putQueue.size())
+                .mapToObj(i -> putQueue.removeLast())
+                .toList()
+                .stream();
     }
 
     /**
