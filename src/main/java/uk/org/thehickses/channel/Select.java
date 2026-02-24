@@ -1,5 +1,6 @@
 package uk.org.thehickses.channel;
 
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -124,22 +125,31 @@ public class Select
         @Override
         public boolean run()
         {
-            var allClosed = new AtomicBoolean(true);
-            if (cases.stream()
+            var f = cases.stream()
                     .map(ChannelCase::runSync)
-                    .peek(res -> allClosed.compareAndSet(true, res == CaseResult.CHANNEL_CLOSED))
-                    .anyMatch(CaseResult.VALUE_READ::equals))
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(Optional::isEmpty))
+                    .findFirst();
+            if (f.isEmpty())
+            {
+                defaultProcessor.run();
                 return true;
-            if (allClosed.get())
+            }
+            if (f.get().isEmpty())
                 return false;
-            defaultProcessor.run();
+            f.get().get().run();
             return true;
+            // var allClosed = new AtomicBoolean(true);
+            // if (cases.stream()
+            // .map(ChannelCase::runSync)
+            // .peek(res -> allClosed.compareAndSet(true, res == CaseResult.CHANNEL_CLOSED))
+            // .anyMatch(CaseResult.VALUE_READ::equals))
+            // return true;
+            // if (allClosed.get())
+            // return false;
+            // defaultProcessor.run();
+            // return true;
         }
-    }
-
-    private static enum CaseResult
-    {
-        VALUE_READ, CHANNEL_CLOSED, NO_VALUE_AVAILABLE
     }
 
     private static class ChannelCase<T>
@@ -153,16 +163,11 @@ public class Select
             this.processor = processor;
         }
 
-        public CaseResult runSync()
+        public Optional<Runnable> runSync()
         {
             return Optional.ofNullable(channel.getNonBlocking())
-                    .map(o -> o.map(v ->
-                        {
-                            processor.accept(v);
-                            return CaseResult.VALUE_READ;
-                        })
-                            .orElse(CaseResult.CHANNEL_CLOSED))
-                    .orElse(CaseResult.NO_VALUE_AVAILABLE);
+                    .map(o -> o.map(v -> (Runnable) () -> processor.accept(v)))
+                    .orElse(null);
         }
 
         public CaseRunner<T> runAsync(Channel<Optional<Runnable>> processorRunnerChannel,
