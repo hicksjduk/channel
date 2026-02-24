@@ -1,6 +1,5 @@
 package uk.org.thehickses.channel;
 
-import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -8,6 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -43,7 +43,7 @@ public class Select
 
         private SelecterWithoutDefault(ChannelCase<?> newCase)
         {
-            this.cases = Arrays.asList(newCase);
+            this.cases = List.of(newCase);
         }
 
         private SelecterWithoutDefault(SelecterWithoutDefault base, ChannelCase<?> newCase)
@@ -74,21 +74,28 @@ public class Select
 
         /**
          * Runs the select. As this selecter has no default, this method blocks until either a value is retrieved from
-         * one of the channels, or all the channels are closed.
+         * one of the channels, or all the channels are closed and empty.
          * 
          * @return whether a value was selected and processed. If this is false, it means that all the channels were
-         *         closed.
+         *         closed and empty.
          */
         @Override
         public boolean run()
         {
             var selectGroup = new SelectGroup();
-            var processorRunnerChannel = new Channel<Runnable>(1);
+            var caseCount = cases.size();
+            var processorRunnerChannel = new Channel<Optional<Runnable>>(caseCount);
             cases.forEach(c -> c.runAsync(processorRunnerChannel, selectGroup));
-            return processorRunnerChannel.stream()
-                    .peek(r -> r.run())
+            var answer = IntStream.range(0, caseCount)
+                    .mapToObj(i -> processorRunnerChannel.get())
+                    .map(Optional::get)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .peek(Runnable::run)
                     .findFirst()
                     .isPresent();
+            processorRunnerChannel.close();
+            return answer;
         }
     }
 
@@ -112,7 +119,7 @@ public class Select
          * the default processor is run.
          * 
          * @return whether a value was selected and processed, or the default processor was run. If this is false, it
-         *         means that all the channels were closed.
+         *         means that all the channels were closed and empty.
          */
         @Override
         public boolean run()
@@ -158,7 +165,7 @@ public class Select
                     .orElse(CaseResult.NO_VALUE_AVAILABLE);
         }
 
-        public CaseRunner<T> runAsync(Channel<Runnable> processorRunnerChannel,
+        public CaseRunner<T> runAsync(Channel<Optional<Runnable>> processorRunnerChannel,
                 SelectGroup selectGroup)
         {
             var cr = new CaseRunner<>(this, processorRunnerChannel, selectGroup);
@@ -172,31 +179,24 @@ public class Select
     {
         private final Channel<T> channel;
         private final Consumer<? super T> processor;
-        private final Channel<Runnable> processorRunnerChannel;
-        private final SelectGroup selectGroup;
+        private final Channel<Optional<Runnable>> processorRunnerChannel;
         private final SelectControllerSupplier<T> selectControllerSupplier;
 
-        public CaseRunner(ChannelCase<T> channelCase, Channel<Runnable> processorRunnerChannel,
-                SelectGroup selectGroup)
+        public CaseRunner(ChannelCase<T> channelCase,
+                Channel<Optional<Runnable>> processorRunnerChannel, SelectGroup selectGroup)
         {
             this.channel = channelCase.channel;
             this.processor = channelCase.processor;
             this.processorRunnerChannel = processorRunnerChannel;
-            this.selectGroup = selectGroup;
             this.selectControllerSupplier = r -> selectGroup.addMember(channel, r);
         }
 
         @Override
         public void run()
         {
-            if (channel.get(selectControllerSupplier)
-                    .map(v ->
-                        {
-                            processorRunnerChannel.put(() -> processor.accept(v));
-                            return true;
-                        })
-                    .orElse(selectGroup.allResultsIn()))
-                processorRunnerChannel.close();
+            Optional<Runnable> processorRunner = channel.get(selectControllerSupplier)
+                    .map(v -> () -> processor.accept(v));
+            processorRunnerChannel.put(processorRunner);
         }
     }
 }

@@ -3,7 +3,6 @@ package uk.org.thehickses.channel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import uk.org.thehickses.channel.Channel.GetRequest;
@@ -12,8 +11,6 @@ class SelectGroup implements SelectController
 {
     private final List<GroupMember<?>> members = new ArrayList<>();
     private final AtomicReference<GetRequest<?>> selected = new AtomicReference<>();
-    private final AtomicInteger resultCount = new AtomicInteger();
-
     public <T> SelectGroup addMember(Channel<T> channel, GetRequest<T> request)
     {
         synchronized (members)
@@ -32,14 +29,6 @@ class SelectGroup implements SelectController
         return true;
     }
     
-    public boolean allResultsIn()
-    {
-        synchronized (members)
-        {
-            return resultCount.incrementAndGet() == members.size();
-        }
-    }
-
     public void cancel()
     {
         cancelAllExcept(selected.get());
