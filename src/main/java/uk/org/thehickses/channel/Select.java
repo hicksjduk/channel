@@ -7,7 +7,6 @@ import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -86,16 +85,13 @@ public class Select
             var caseCount = cases.size();
             var processorRunnerChannel = new Channel<Optional<Runnable>>(caseCount);
             cases.forEach(c -> c.runAsync(processorRunnerChannel, selectGroup));
-            var answer = IntStream.range(0, caseCount)
-                    .mapToObj(i -> processorRunnerChannel.get())
-                    .map(Optional::get)
+            return processorRunnerChannel.stream()
+                    .limit(caseCount)
                     .filter(Optional::isPresent)
                     .map(Optional::get)
                     .peek(Runnable::run)
                     .findFirst()
                     .isPresent();
-            processorRunnerChannel.close();
-            return answer;
         }
     }
 
