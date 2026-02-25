@@ -1,13 +1,13 @@
 package uk.org.thehickses.channel;
 
-import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -125,30 +125,21 @@ public class Select
         @Override
         public boolean run()
         {
-            var f = cases.stream()
+            var processor = new AtomicReference<>(Optional.<Runnable> empty());
+            cases.stream()
                     .map(ChannelCase::runSync)
-                    .filter(Objects::nonNull)
-                    .sorted(Comparator.comparing(Optional::isEmpty))
-                    .findFirst();
-            if (f.isEmpty())
-            {
-                defaultProcessor.run();
-                return true;
-            }
-            if (f.get().isEmpty())
-                return false;
-            f.get().get().run();
-            return true;
-            // var allClosed = new AtomicBoolean(true);
-            // if (cases.stream()
-            // .map(ChannelCase::runSync)
-            // .peek(res -> allClosed.compareAndSet(true, res == CaseResult.CHANNEL_CLOSED))
-            // .anyMatch(CaseResult.VALUE_READ::equals))
-            // return true;
-            // if (allClosed.get())
-            // return false;
-            // defaultProcessor.run();
-            // return true;
+                    .filter(Predicate.not(CaseResult::isChannelClosed))
+                    .map(CaseResult::getProcessor)
+                    .map(p -> p.orElse(defaultProcessor))
+                    .map(Optional::of)
+                    .peek(processor::set)
+                    .takeWhile(x -> processor.get()
+                            .filter(Predicate.not(defaultProcessor::equals))
+                            .isEmpty())
+                    .count();
+            var p = processor.get();
+            p.ifPresent(Runnable::run);
+            return !p.isEmpty();
         }
     }
 
@@ -163,11 +154,13 @@ public class Select
             this.processor = processor;
         }
 
-        public Optional<Runnable> runSync()
+        public CaseResult runSync()
         {
             return Optional.ofNullable(channel.getNonBlocking())
-                    .map(o -> o.map(v -> (Runnable) () -> processor.accept(v)))
-                    .orElse(null);
+                    .map(o -> o.map(v -> (Runnable) () -> processor.accept(v))
+                            .map(CaseResult::valueRetrieved)
+                            .orElse(CaseResult.channelClosed()))
+                    .orElse(CaseResult.noValueAvailable());
         }
 
         public CaseRunner<T> runAsync(Channel<Optional<Runnable>> processorRunnerChannel,
@@ -177,6 +170,55 @@ public class Select
             ForkJoinPool.commonPool()
                     .execute(cr);
             return cr;
+        }
+    }
+
+    private static class CaseResult
+    {
+        public static CaseResult valueRetrieved(Runnable processor)
+        {
+            return new CaseResult(Optional.of(processor));
+        }
+
+        public static CaseResult noValueAvailable()
+        {
+            return new CaseResult(null);
+        }
+
+        public static CaseResult channelClosed()
+        {
+            return new CaseResult(Optional.empty());
+        }
+
+        private final Optional<Runnable> processor;
+
+        private CaseResult(Optional<Runnable> processor)
+        {
+            this.processor = processor;
+        }
+
+        @SuppressWarnings("unused")
+        public boolean isValueRetrieved()
+        {
+            return processor != null && processor.isPresent();
+        }
+
+        @SuppressWarnings("unused")
+        public boolean isNoValueAvailable()
+        {
+            return processor == null;
+        }
+
+        public boolean isChannelClosed()
+        {
+            return processor != null && processor.isEmpty();
+        }
+
+        public Optional<Runnable> getProcessor()
+        {
+            return Optional.ofNullable(processor)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get);
         }
     }
 
