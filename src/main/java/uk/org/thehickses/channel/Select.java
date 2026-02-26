@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -121,21 +120,22 @@ public class Select
         @Override
         public boolean run()
         {
-            var processor = new AtomicReference<>(Optional.<Runnable> empty());
-            cases.stream()
+            Iterable<CaseResult> results = () -> cases.stream()
                     .map(ChannelCase::runSync)
                     .filter(Predicate.not(CaseResult::isChannelClosed))
-                    .map(CaseResult::getProcessor)
-                    .map(p -> p.orElse(defaultProcessor))
-                    .map(Optional::of)
-                    .peek(processor::set)
-                    .takeWhile(x -> processor.get()
-                            .filter(Predicate.not(defaultProcessor::equals))
-                            .isEmpty())
-                    .count();
-            var p = processor.get();
-            p.ifPresent(Runnable::run);
-            return !p.isEmpty();
+                    .iterator();
+            var runProcessor = false;
+            for (var res : results)
+            {
+                res.getProcessor()
+                        .ifPresent(Runnable::run);
+                if (res.isValueRetrieved())
+                    return true;
+                runProcessor = true;
+            }
+            if (runProcessor)
+                defaultProcessor.run();
+            return runProcessor;
         }
     }
 
@@ -193,7 +193,6 @@ public class Select
             this.processor = processor;
         }
 
-        @SuppressWarnings("unused")
         public boolean isValueRetrieved()
         {
             return processor != null && processor.isPresent();
