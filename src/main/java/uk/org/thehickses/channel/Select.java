@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -120,22 +121,20 @@ public class Select
         @Override
         public boolean run()
         {
-            Iterable<CaseResult> results = () -> cases.stream()
+            var runProcessor = new AtomicBoolean(false);
+            var processor = cases.stream()
                     .map(ChannelCase::runSync)
                     .filter(Predicate.not(CaseResult::isChannelClosed))
-                    .iterator();
-            var runProcessor = false;
-            for (var res : results)
-            {
-                res.getProcessor()
-                        .ifPresent(Runnable::run);
-                if (res.isValueRetrieved())
-                    return true;
-                runProcessor = true;
-            }
-            if (runProcessor)
-                defaultProcessor.run();
-            return runProcessor;
+                    .peek(r -> runProcessor.set(true))
+                    .filter(CaseResult::isValueRetrieved)
+                    .findFirst()
+                    .map(CaseResult::getProcessor)
+                    .map(Optional::get)
+                    .orElse(defaultProcessor);
+            if (!runProcessor.get())
+                return false;
+            processor.run();
+            return true;
         }
     }
 
