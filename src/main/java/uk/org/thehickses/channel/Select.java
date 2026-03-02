@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -89,9 +89,8 @@ public class Select
                     .limit(caseCount)
                     .filter(CaseResult::isValueRetrieved)
                     .map(CaseResult::getHandler)
-                    .map(Optional::get)
-                    .peek(Runnable::run)
                     .findFirst()
+                    .map(HandlerRunner.RUN::run)
                     .isPresent();
         }
     }
@@ -121,20 +120,17 @@ public class Select
         @Override
         public boolean run()
         {
-            var runHandler = new AtomicBoolean(false);
+            var runner = new AtomicReference<>(HandlerRunner.NO_RUN);
             var handler = cases.stream()
                     .map(ChannelCase::runSync)
                     .filter(Predicate.not(CaseResult::isChannelClosed))
-                    .peek(r -> runHandler.set(true))
+                    .peek(r -> runner.set(HandlerRunner.RUN))
                     .filter(CaseResult::isValueRetrieved)
                     .findFirst()
                     .map(CaseResult::getHandler)
-                    .map(Optional::get)
                     .orElse(defaultHandler);
-            if (!runHandler.get())
-                return false;
-            handler.run();
-            return true;
+            return runner.get()
+                    .run(handler);
         }
     }
 
@@ -212,11 +208,32 @@ public class Select
             return handler != null && handler.isEmpty();
         }
 
-        public Optional<Runnable> getHandler()
+        public Runnable getHandler()
         {
-            return Optional.ofNullable(handler)
-                    .filter(Optional::isPresent)
-                    .map(Optional::get);
+            return handler == null ? null : handler.orElse(null);
+        }
+    }
+
+    private static enum HandlerRunner
+    {
+        NO_RUN(h -> false), RUN(HandlerRunner::doRun);
+
+        private final Predicate<Runnable> runIt;
+
+        private HandlerRunner(Predicate<Runnable> runIt)
+        {
+            this.runIt = runIt;
+        }
+
+        public boolean run(Runnable r)
+        {
+            return runIt.test(r);
+        }
+
+        private static boolean doRun(Runnable r)
+        {
+            r.run();
+            return true;
         }
     }
 }
