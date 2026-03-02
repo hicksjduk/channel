@@ -45,6 +45,9 @@ iteration continues until the channel is closed and empty.
 A channel also provides a `stream()` method, which creates a `Stream` over the values retrieved from 
 the channel.
 
+**Note**: If two or more processes iterate simultaneously over the same channel, each will receive a subset of the available values. These subsets are disjoint: each value is in only one of them. Therefore,
+each iteration will process a different set of values.
+
 ### Closing a channel
 
 A channel can only be written to while it is open. Closing the channel, which is done by calling its
@@ -121,7 +124,7 @@ ch <- value
 
 ```java
 ch.put(value);
-// Returns false if ch is closed
+// Returns false (and does not put the value) if ch is closed
 ```
 
 ### Iterate over a channel until it is closed, or the value retrieved is "stop"
@@ -176,7 +179,11 @@ Go provides a special `select` statement which allows for multiple channels to b
 at the same time; as soon as a value is read from any of the specified channels, it is processed and
 the select completes. The select may also optionally have a `default` clause, in which
 case the `default` clause is executed, and the select completes, even if none of the specified channels
-has an available value. Without a `default` clause, the select blocks until a value is available on one
+has an available value. (This is true if at least one of the channels is open; 
+[see below](#all-channels-closed) 
+for a discussion
+of the case where all the channels are closed.)
+Without a `default` clause, the select blocks until a value is available on one
 of the channels, or all the channels are closed.
 
 An equivalent Java implementation of this is also provided in this package. Shown below are a 
@@ -228,7 +235,9 @@ boolean doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<S
 }
 ```
 
-**Note** that this implementation of the select differs from Go in how it behaves when all the selected
+### All channels closed
+
+Note that this implementation of the select differs from Go in how it behaves when all the selected
 channels are closed. In these circumstances, Go executes the handler for one of the cases, and which 
 handler to execute is apparently chosen at random. The Java implementation executes no handler at all, 
 not even the default handler if one is specified, and the `run()` method returns a boolean result - 
