@@ -11,6 +11,7 @@ class SelectGroup implements SelectController
 {
     private final List<GroupMember<?>> members = new ArrayList<>();
     private final AtomicReference<GetRequest<?>> selected = new AtomicReference<>();
+
     public <T> SelectGroup addMember(Channel<T> channel, GetRequest<T> request)
     {
         synchronized (members)
@@ -25,10 +26,11 @@ class SelectGroup implements SelectController
     {
         if (!selected.compareAndSet(null, req))
             return false;
-        ForkJoinPool.commonPool().execute(() -> cancelAllExcept(req));
+        ForkJoinPool.commonPool()
+                .execute(() -> cancelAllExcept(req));
         return true;
     }
-    
+
     public void cancel()
     {
         cancelAllExcept(selected.get());
@@ -38,7 +40,9 @@ class SelectGroup implements SelectController
     {
         synchronized (members)
         {
-            members.stream().filter(m -> m.request != req).forEach(GroupMember::cancel);
+            members.stream()
+                    .filter(m -> m.request != req)
+                    .forEach(GroupMember::cancel);
         }
     }
 
