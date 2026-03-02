@@ -18,15 +18,15 @@ import java.util.stream.Stream;
 public class Select
 {
     /**
-     * Creates a selecter which runs a case to read the specified channel, and process the retrieved value if there is
+     * Creates a selecter which runs a case to read the specified channel, and handle the retrieved value if there is
      * one.
      */
     public static <T> SelecterWithoutDefault withCase(Channel<T> channel,
-            Consumer<? super T> processor)
+            Consumer<? super T> handler)
     {
-        Stream.of(channel, processor)
+        Stream.of(channel, handler)
                 .forEach(Objects::requireNonNull);
-        return new SelecterWithoutDefault(new ChannelCase<>(channel, processor));
+        return new SelecterWithoutDefault(new ChannelCase<>(channel, handler));
     }
 
     public static interface Selecter
@@ -52,31 +52,30 @@ public class Select
         }
 
         /**
-         * Creates a selecter which adds a case, to read the specified channel and process the retrieved value if there
+         * Creates a selecter which adds a case, to read the specified channel and handle the retrieved value if there
          * is one, to the receiver.
          */
-        public <T> SelecterWithoutDefault withCase(Channel<T> channel,
-                Consumer<? super T> processor)
+        public <T> SelecterWithoutDefault withCase(Channel<T> channel, Consumer<? super T> handler)
         {
-            Stream.of(channel, processor)
+            Stream.of(channel, handler)
                     .forEach(Objects::requireNonNull);
-            return new SelecterWithoutDefault(this, new ChannelCase<>(channel, processor));
+            return new SelecterWithoutDefault(this, new ChannelCase<>(channel, handler));
         }
 
         /**
-         * Creates a selecter which adds a default processor to the receiver.
+         * Creates a selecter which adds a default handler to the receiver.
          */
-        public SelecterWithDefault withDefault(Runnable processor)
+        public SelecterWithDefault withDefault(Runnable handler)
         {
-            Objects.requireNonNull(processor);
-            return new SelecterWithDefault(this, processor);
+            Objects.requireNonNull(handler);
+            return new SelecterWithDefault(this, handler);
         }
 
         /**
          * Runs the select. As this selecter has no default, this method blocks until either a value is retrieved from
          * one of the channels, or all the channels are closed and empty.
          * 
-         * @return whether a value was selected and processed. If this is false, it means that all the channels were
+         * @return whether a value was selected and handled. If this is false, it means that all the channels were
          *         closed and empty.
          */
         @Override
@@ -84,11 +83,12 @@ public class Select
         {
             var selectGroup = new SelectGroup();
             var caseCount = cases.size();
-            var processorRunnerChannel = new Channel<Optional<Runnable>>(caseCount);
-            cases.forEach(c -> c.runAsync(processorRunnerChannel, selectGroup));
-            return processorRunnerChannel.stream()
+            var resultChannel = new Channel<CaseResult>(caseCount);
+            cases.forEach(c -> c.runAsync(resultChannel, selectGroup));
+            return resultChannel.stream()
                     .limit(caseCount)
-                    .filter(Optional::isPresent)
+                    .filter(CaseResult::isValueRetrieved)
+                    .map(CaseResult::getHandler)
                     .map(Optional::get)
                     .peek(Runnable::run)
                     .findFirst()
@@ -102,38 +102,38 @@ public class Select
     public static class SelecterWithDefault implements Selecter
     {
         private final List<ChannelCase<?>> cases;
-        private final Runnable defaultProcessor;
+        private final Runnable defaultHandler;
 
-        private SelecterWithDefault(SelecterWithoutDefault base, Runnable defaultProcessor)
+        private SelecterWithDefault(SelecterWithoutDefault base, Runnable defaultHandler)
         {
             this.cases = new LinkedList<>(base.cases);
-            this.defaultProcessor = defaultProcessor;
+            this.defaultHandler = defaultHandler;
         }
 
         /**
          * Runs the select. As this selecter has a default, this method reads each of the channels in turn, but does not
          * block if any contains no value. If, after reading all the channels, none has a value and any are still open,
-         * the default processor is run.
+         * the default handler is run.
          * 
-         * @return whether a value was selected and processed, or the default processor was run. If this is false, it
-         *         means that all the channels were closed and empty.
+         * @return whether a value was selected and handled, or the default handler was run. If this is false, it means
+         *         that all the channels were closed and empty.
          */
         @Override
         public boolean run()
         {
-            var runProcessor = new AtomicBoolean(false);
-            var processor = cases.stream()
+            var runHandler = new AtomicBoolean(false);
+            var handler = cases.stream()
                     .map(ChannelCase::runSync)
                     .filter(Predicate.not(CaseResult::isChannelClosed))
-                    .peek(r -> runProcessor.set(true))
+                    .peek(r -> runHandler.set(true))
                     .filter(CaseResult::isValueRetrieved)
                     .findFirst()
-                    .map(CaseResult::getProcessor)
+                    .map(CaseResult::getHandler)
                     .map(Optional::get)
-                    .orElse(defaultProcessor);
-            if (!runProcessor.get())
+                    .orElse(defaultHandler);
+            if (!runHandler.get())
                 return false;
-            processor.run();
+            handler.run();
             return true;
         }
     }
@@ -141,38 +141,42 @@ public class Select
     private static class ChannelCase<T>
     {
         public final Channel<T> channel;
-        public final Consumer<? super T> processor;
+        public final Consumer<? super T> handler;
 
-        public ChannelCase(Channel<T> channel, Consumer<? super T> processor)
+        public ChannelCase(Channel<T> channel, Consumer<? super T> handler)
         {
             this.channel = channel;
-            this.processor = processor;
+            this.handler = handler;
         }
 
         public CaseResult runSync()
         {
-            return Optional.ofNullable(channel.getNonBlocking())
-                    .map(o -> o.map(v -> (Runnable) () -> processor.accept(v))
-                            .map(CaseResult::valueRetrieved)
-                            .orElse(CaseResult.channelClosed()))
-                    .orElse(CaseResult.noValueAvailable());
+            return toResult(channel.getNonBlocking());
         }
 
-        public CaseRunner<T> runAsync(Channel<Optional<Runnable>> processorRunnerChannel,
-                SelectGroup selectGroup)
+        public void runAsync(Channel<CaseResult> resultChannel, SelectGroup selectGroup)
         {
-            var cr = new CaseRunner<>(this, processorRunnerChannel, selectGroup);
+            Runnable runner = () -> resultChannel
+                    .put(toResult(channel.get(r -> selectGroup.addMember(channel, r))));
             ForkJoinPool.commonPool()
-                    .execute(cr);
-            return cr;
+                    .execute(runner);
+        }
+
+        private CaseResult toResult(Optional<T> readResult)
+        {
+            if (readResult == null)
+                return CaseResult.noValueAvailable();
+            return readResult.<Runnable> map(v -> () -> handler.accept(v))
+                    .map(CaseResult::valueRetrieved)
+                    .orElse(CaseResult.channelClosed());
         }
     }
 
     private static class CaseResult
     {
-        public static CaseResult valueRetrieved(Runnable processor)
+        public static CaseResult valueRetrieved(Runnable handler)
         {
-            return new CaseResult(Optional.of(processor));
+            return new CaseResult(Optional.of(handler));
         }
 
         public static CaseResult noValueAvailable()
@@ -185,59 +189,34 @@ public class Select
             return new CaseResult(Optional.empty());
         }
 
-        private final Optional<Runnable> processor;
+        private final Optional<Runnable> handler;
 
-        private CaseResult(Optional<Runnable> processor)
+        private CaseResult(Optional<Runnable> handler)
         {
-            this.processor = processor;
+            this.handler = handler;
         }
 
         public boolean isValueRetrieved()
         {
-            return processor != null && processor.isPresent();
+            return handler != null && handler.isPresent();
         }
 
         @SuppressWarnings("unused")
         public boolean isNoValueAvailable()
         {
-            return processor == null;
+            return handler == null;
         }
 
         public boolean isChannelClosed()
         {
-            return processor != null && processor.isEmpty();
+            return handler != null && handler.isEmpty();
         }
 
-        public Optional<Runnable> getProcessor()
+        public Optional<Runnable> getHandler()
         {
-            return Optional.ofNullable(processor)
+            return Optional.ofNullable(handler)
                     .filter(Optional::isPresent)
                     .map(Optional::get);
-        }
-    }
-
-    private static class CaseRunner<T> implements Runnable
-    {
-        private final Channel<T> channel;
-        private final Consumer<? super T> processor;
-        private final Channel<Optional<Runnable>> processorRunnerChannel;
-        private final SelectControllerSupplier<T> selectControllerSupplier;
-
-        public CaseRunner(ChannelCase<T> channelCase,
-                Channel<Optional<Runnable>> processorRunnerChannel, SelectGroup selectGroup)
-        {
-            this.channel = channelCase.channel;
-            this.processor = channelCase.processor;
-            this.processorRunnerChannel = processorRunnerChannel;
-            this.selectControllerSupplier = r -> selectGroup.addMember(channel, r);
-        }
-
-        @Override
-        public void run()
-        {
-            Optional<Runnable> processorRunner = channel.get(selectControllerSupplier)
-                    .map(v -> () -> processor.accept(v));
-            processorRunnerChannel.put(processorRunner);
         }
     }
 }
