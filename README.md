@@ -191,17 +191,17 @@ func doSelect(channelA chan int, channelB chan bool, channelC chan string) bool 
 	select {
 	case value, ok := <-channelA:
 		if ok {
-			// process value which is an int  
+			// handle value which is an int  
 		}
 		return ok
 	case value, ok := <-channelB:
 		if ok {
-			// process value which is a bool
+			// handle value which is a bool
 		}
 		return ok
 	case value, ok := <-channelC:
 		if ok {
-			// process value which is a string
+			// handle value which is a string
 		}
 		return ok
 	default:
@@ -217,11 +217,11 @@ func doSelect(channelA chan int, channelB chan bool, channelC chan string) bool 
 boolean doSelect(Channel<Integer> channelA, Channel<Boolean> channelB, Channel<String> channelC)
 {
 	return Select.withCase(channelA, value -> {
-		// process value which is an Integer  
+		// handle value which is an Integer  
 	}).withCase(channelB, value -> {
-		// process value which is a Boolean  
+		// handle value which is a Boolean  
 	}).withCase(channelC, value -> {
-		// process value which is a String  
+		// handle value which is a String  
 	}).withDefault(() -> {
 		// do default processing
 	}).run();
@@ -242,4 +242,4 @@ no value available (`ok` set to false in the example above).
 However, since the choice of handler is non-deterministic, all handlers must cater
 for that possibility. I think it is arguable that the Java implementation presented here is an 
 improvement, 
-as it separates the closure concern from the processing of values.
+as it separates the closure concern from the handling of values.
