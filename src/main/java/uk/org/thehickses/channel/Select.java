@@ -152,7 +152,7 @@ public class Select
 
         public void runAsync(Channel<CaseResult> resultChannel, SelectGroup selectGroup)
         {
-            SelectControllerSupplier<T> scs = r -> selectGroup.addMember(channel, r);
+            SelectControllerSupplier<T> scs = req -> selectGroup.addMember(channel, req);
             Runnable runner = () -> resultChannel.put(CaseResult.from(channel.get(scs), handler));
             ForkJoinPool.commonPool()
                     .execute(runner);
