@@ -147,42 +147,27 @@ public class Select
 
         public CaseResult runSync()
         {
-            return toResult(channel.getNonBlocking());
+            return CaseResult.from(channel.getNonBlocking(), handler);
         }
 
         public void runAsync(Channel<CaseResult> resultChannel, SelectGroup selectGroup)
         {
-            Runnable runner = () -> resultChannel
-                    .put(toResult(channel.get(r -> selectGroup.addMember(channel, r))));
+            SelectControllerSupplier<T> scs = r -> selectGroup.addMember(channel, r);
+            Runnable runner = () -> resultChannel.put(CaseResult.from(channel.get(scs), handler));
             ForkJoinPool.commonPool()
                     .execute(runner);
-        }
-
-        private CaseResult toResult(Optional<T> readResult)
-        {
-            if (readResult == null)
-                return CaseResult.noValueAvailable();
-            return readResult.<Runnable> map(v -> () -> handler.accept(v))
-                    .map(CaseResult::valueRetrieved)
-                    .orElse(CaseResult.channelClosed());
         }
     }
 
     private static class CaseResult
     {
-        public static CaseResult valueRetrieved(Runnable handler)
+        public static <T> CaseResult from(Optional<T> readResult, Consumer<? super T> handler)
         {
-            return new CaseResult(Optional.of(handler));
-        }
-
-        public static CaseResult noValueAvailable()
-        {
-            return new CaseResult(null);
-        }
-
-        public static CaseResult channelClosed()
-        {
-            return new CaseResult(Optional.empty());
+            if (readResult == null)
+                return new CaseResult(null);
+            return readResult.map(v -> (Runnable) () -> handler.accept(v))
+                    .map(h -> new CaseResult(Optional.of(h)))
+                    .orElse(new CaseResult(Optional.empty()));
         }
 
         private final Optional<Runnable> handler;
