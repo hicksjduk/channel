@@ -197,12 +197,7 @@ public class Channel<T> implements Iterable<T>
      */
     Optional<T> getNonBlocking()
     {
-        return doWithLock(lock, () ->
-            {
-                if (putQueue.isEmpty() && isOpen())
-                    return null;
-                return get();
-            });
+        return doWithLock(lock, () -> putQueue.isEmpty() && isOpen() ? null : get());
     }
 
     /**

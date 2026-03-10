@@ -87,9 +87,9 @@ public class Select
             cases.forEach(c -> c.runAsync(resultChannel, selectGroup));
             return resultChannel.stream()
                     .limit(caseCount)
-                    .filter(CaseResult::isValueRetrieved)
-                    .map(CaseResult::getHandler)
+                    .filter(CaseResult::valueRetrieved)
                     .findFirst()
+                    .map(CaseResult::getHandler)
                     .map(HandlerRunner.RUN::run)
                     .isPresent();
         }
@@ -123,9 +123,9 @@ public class Select
             var runner = new AtomicReference<>(HandlerRunner.NO_RUN);
             var handler = cases.stream()
                     .map(ChannelCase::runSync)
-                    .filter(Predicate.not(CaseResult::isChannelClosed))
+                    .filter(Predicate.not(CaseResult::channelClosed))
                     .peek(r -> runner.set(HandlerRunner.RUN))
-                    .filter(CaseResult::isValueRetrieved)
+                    .filter(CaseResult::valueRetrieved)
                     .findFirst()
                     .map(CaseResult::getHandler)
                     .orElse(defaultHandler);
@@ -163,11 +163,9 @@ public class Select
     {
         public static <T> CaseResult from(Optional<T> readResult, Consumer<? super T> handler)
         {
-            if (readResult == null)
-                return new CaseResult(null);
-            return readResult.map(v -> (Runnable) () -> handler.accept(v))
-                    .map(h -> new CaseResult(Optional.of(h)))
-                    .orElse(new CaseResult(Optional.empty()));
+            var h = readResult == null ? null
+                    : readResult.map(v -> (Runnable) () -> handler.accept(v));
+            return new CaseResult(h);
         }
 
         private final Optional<Runnable> handler;
@@ -177,18 +175,18 @@ public class Select
             this.handler = handler;
         }
 
-        public boolean isValueRetrieved()
+        public boolean valueRetrieved()
         {
             return handler != null && handler.isPresent();
         }
 
         @SuppressWarnings("unused")
-        public boolean isNoValueAvailable()
+        public boolean noValueAvailable()
         {
             return handler == null;
         }
 
-        public boolean isChannelClosed()
+        public boolean channelClosed()
         {
             return handler != null && handler.isEmpty();
         }
@@ -201,7 +199,7 @@ public class Select
 
     private static enum HandlerRunner
     {
-        NO_RUN(h -> false), RUN(HandlerRunner::doRun);
+        NO_RUN(r -> false), RUN(HandlerRunner::doRun);
 
         private final Predicate<Runnable> runIt;
 
