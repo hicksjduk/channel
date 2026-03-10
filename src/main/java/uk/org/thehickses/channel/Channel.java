@@ -14,7 +14,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -80,10 +79,11 @@ public class Channel<T> implements Iterable<T>
         status = Status.CLOSED;
         if (!getQueue.isEmpty())
             return getQueue.stream();
-        return IntStream.range(bufferSize, putQueue.size())
-                .mapToObj(i -> putQueue.removeLast())
-                .toList()
-                .stream();
+        var res = putQueue.stream()
+                .skip(bufferSize)
+                .toList();
+        res.forEach(r -> putQueue.removeLast());
+        return res.stream();
     }
 
     /**
