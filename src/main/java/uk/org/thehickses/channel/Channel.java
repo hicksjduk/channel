@@ -60,9 +60,10 @@ public class Channel<T> implements Iterable<T>
     public boolean close()
     {
         var blockedRequests = doWithLock(lock, this::closeAndGetBlockedRequests);
-        if (blockedRequests != null)
-            blockedRequests.forEach(Request::setChannelClosed);
-        return blockedRequests != null;
+        if (blockedRequests == null)
+            return false;
+        blockedRequests.forEach(Request::setChannelClosed);
+        return true;
     }
 
     /**
@@ -72,18 +73,13 @@ public class Channel<T> implements Iterable<T>
      * @return a stream of blocked requests. May be null (the stream was already closed) or empty (there are no blocked
      *         requests).
      */
-    private Stream<? extends Request> closeAndGetBlockedRequests()
+    private Stream<Request> closeAndGetBlockedRequests()
     {
         if (status == Status.CLOSED)
             return null;
         status = Status.CLOSED;
-        if (!getQueue.isEmpty())
-            return getQueue.stream();
-        var res = putQueue.stream()
-                .skip(bufferSize)
-                .toList();
-        res.forEach(r -> putQueue.removeLast());
-        return res.stream();
+        return Stream.concat(getQueue.stream(), putQueue.stream()
+                .skip(bufferSize));
     }
 
     /**
@@ -215,7 +211,10 @@ public class Channel<T> implements Iterable<T>
                 putQueue.get(bufferSize)
                         .setCompleted();
             var putRequest = putQueue.pop();
-            getRequest.setReturnedValue(putRequest.value);
+            if (putRequest.isSelectable())
+                getRequest.setReturnedValue(putRequest.value);
+            else
+                getRequest.setNoValue();
         }
     }
 
@@ -228,10 +227,8 @@ public class Channel<T> implements Iterable<T>
      */
     void cancel(GetRequest<T> request)
     {
-        if (request.isComplete())
-            return;
-        doWithLock(lock, () -> getQueue.remove(request));
-        request.setNoValue();
+        if (!request.isComplete())
+            request.setNoValue();
     }
 
     /**
@@ -343,7 +340,7 @@ public class Channel<T> implements Iterable<T>
 
         public boolean isSelectable()
         {
-            return selectController.select(this);
+            return !isComplete() && selectController.select(this);
         }
 
         @Override
@@ -382,12 +379,18 @@ public class Channel<T> implements Iterable<T>
 
         public void setCompleted()
         {
-            result.complete(true);
+            if (!isComplete())
+                result.complete(true);
         }
 
         public boolean result()
         {
             return getResult(result);
+        }
+
+        public boolean isSelectable()
+        {
+            return isComplete() && result();
         }
     }
 
