@@ -223,19 +223,17 @@ public class Channel<T> implements Iterable<T>
     }
 
     /**
-     * Cancels the specified get request, by removing it from the get queue and completing it with no value if it is
-     * blocked
+     * Cancels the specified get request, by removing it from the get queue and completing it with no value. Does
+     * nothing if the request is not in the get queue.
      * 
      * @param request
      *            the request
      */
     void cancel(GetRequest<T> request)
     {
-        if (!request.isComplete())
-        {
-            doWithLock(lock, () -> getQueue.remove(request));
-            request.setNoValue();
-        }
+        doWithLock(lock, () -> Optional.of(getQueue.remove(request))
+                .filter(Boolean::booleanValue)
+                .ifPresent(b -> request.setNoValue()));
     }
 
     /**
