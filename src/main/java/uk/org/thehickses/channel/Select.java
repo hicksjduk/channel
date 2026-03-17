@@ -82,16 +82,17 @@ public class Select
         public boolean run()
         {
             var selectGroup = new SelectGroup();
-            var caseCount = cases.size();
-            var resultChannel = new Channel<CaseResult>(caseCount);
+            var resultChannel = new Channel<CaseResult>();
             cases.forEach(c -> c.runAsync(resultChannel, selectGroup));
-            return resultChannel.stream()
-                    .limit(caseCount)
+            var answer = resultChannel.stream()
+                    .limit(cases.size())
                     .filter(CaseResult::valueRetrieved)
-                    .findFirst()
                     .map(CaseResult::getHandler)
                     .map(HandlerRunner.RUN::run)
+                    .findFirst()
                     .isPresent();
+            resultChannel.close();
+            return answer;
         }
     }
 
@@ -126,8 +127,8 @@ public class Select
                     .filter(Predicate.not(CaseResult::channelClosed))
                     .peek(r -> runner.set(HandlerRunner.RUN))
                     .filter(CaseResult::valueRetrieved)
-                    .findFirst()
                     .map(CaseResult::getHandler)
+                    .findFirst()
                     .orElse(defaultHandler);
             return runner.get()
                     .run(handler);
