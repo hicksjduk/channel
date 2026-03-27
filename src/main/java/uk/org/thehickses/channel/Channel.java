@@ -261,12 +261,9 @@ public class Channel<T> implements Iterable<T>
         @Override
         public boolean tryAdvance(Consumer<? super T> action)
         {
-            return get().map(v ->
-                {
-                    action.accept(v);
-                    return true;
-                })
-                    .orElse(false);
+            var doAction = get().<Runnable> map(v -> () -> action.accept(v));
+            doAction.ifPresent(Runnable::run);
+            return doAction.isPresent();
         }
 
         @Override
