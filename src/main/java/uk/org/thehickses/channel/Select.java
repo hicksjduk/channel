@@ -5,9 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /**
@@ -82,12 +80,12 @@ public class Select
         public boolean run()
         {
             var selectGroup = new SelectGroup();
-            var resultChannel = new Channel<CaseResult>();
+            var resultChannel = new Channel<Optional<Runnable>>();
             cases.forEach(c -> c.runAsync(resultChannel, selectGroup));
             var answer = resultChannel.stream()
                     .limit(cases.size())
-                    .filter(CaseResult::valueRetrieved)
-                    .map(CaseResult::getHandler)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
                     .peek(Runnable::run)
                     .findFirst()
                     .isPresent();
@@ -124,10 +122,10 @@ public class Select
             var runners = Stream.<Consumer<Runnable>> builder();
             var handler = cases.stream()
                     .map(ChannelCase::runSync)
-                    .filter(Predicate.not(CaseResult::channelClosed))
+                    .filter(o -> o == null || o.isPresent())
                     .peek(r -> runners.add(Runnable::run))
-                    .filter(CaseResult::valueRetrieved)
-                    .map(CaseResult::getHandler)
+                    .filter(Objects::nonNull)
+                    .map(Optional::get)
                     .findFirst()
                     .orElse(defaultHandler);
             return runners.build()
@@ -148,55 +146,45 @@ public class Select
             this.handler = handler;
         }
 
-        public CaseResult runSync()
+        /**
+         * Runs the case synchronously, doing a non-blocking get on the channel.
+         * 
+         * @return null if the non-blocking get returned null (which means that the channel was open and empty),
+         *         otherwise an Optional which is empty if the result of the non-blocking get was empty (which means
+         *         that the channel was closed and empty), or contains a Runnable which invokes the case's handler on
+         *         the retrieved value if one was retrieved.
+         */
+        public Optional<Runnable> runSync()
         {
-            return CaseResult.from(channel.getNonBlocking(), handler);
+            var result = channel.getNonBlocking();
+            if (result == null)
+                return null;
+            return result.map(this::handler);
         }
 
-        public void runAsync(Channel<CaseResult> resultChannel, SelectGroup selectGroup)
+        /**
+         * Runs the case asynchronously, blocking until a result is received and putting the results into the specified
+         * channel.
+         * 
+         * @param resultChannel
+         *            the channel of results. Each result is an Optional which is empty if the channel was closed and
+         *            empty, or contains a Runnable which invokes the case's handler on the returned value if a value
+         *            was received.
+         * @param selectGroup
+         *            the select group which ensures that only one case in each select can return a result.
+         */
+        public void runAsync(Channel<Optional<Runnable>> resultChannel, SelectGroup selectGroup)
         {
             SelectControllerSupplier<T> scs = req -> selectGroup.addMember(channel, req);
-            Runnable runner = () -> resultChannel.put(CaseResult.from(channel.get(scs), handler));
+            Runnable runner = () -> resultChannel.put(channel.get(scs)
+                    .map(this::handler));
             ForkJoinPool.commonPool()
                     .execute(runner);
         }
-    }
 
-    private static class CaseResult
-    {
-        public static <T> CaseResult from(Optional<T> readResult, Consumer<? super T> handler)
+        private Runnable handler(T value)
         {
-            var h = readResult == null ? null
-                    : readResult.map(v -> (Runnable) () -> handler.accept(v));
-            return new CaseResult(h);
-        }
-
-        private final Optional<Runnable> handler;
-
-        private CaseResult(Optional<Runnable> handler)
-        {
-            this.handler = handler;
-        }
-
-        public boolean valueRetrieved()
-        {
-            return handler != null && handler.isPresent();
-        }
-
-        @SuppressWarnings("unused")
-        public boolean noValueAvailable()
-        {
-            return handler == null;
-        }
-
-        public boolean channelClosed()
-        {
-            return handler != null && handler.isEmpty();
-        }
-
-        public Runnable getHandler()
-        {
-            return handler == null ? null : handler.orElse(null);
+            return () -> handler.accept(value);
         }
     }
 }
