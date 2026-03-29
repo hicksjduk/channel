@@ -88,7 +88,7 @@ public class Select
                     .limit(cases.size())
                     .filter(CaseResult::valueRetrieved)
                     .map(CaseResult::getHandler)
-                    .map(HandlerRunner.RUN::run)
+                    .peek(Runnable::run)
                     .findFirst()
                     .isPresent();
             resultChannel.close();
@@ -121,17 +121,19 @@ public class Select
         @Override
         public boolean run()
         {
-            var runner = new AtomicReference<>(HandlerRunner.NO_RUN);
+            var runners = Stream.<Consumer<Runnable>> builder();
             var handler = cases.stream()
                     .map(ChannelCase::runSync)
                     .filter(Predicate.not(CaseResult::channelClosed))
-                    .peek(r -> runner.set(HandlerRunner.RUN))
+                    .peek(r -> runners.add(Runnable::run))
                     .filter(CaseResult::valueRetrieved)
                     .map(CaseResult::getHandler)
                     .findFirst()
                     .orElse(defaultHandler);
-            return runner.get()
-                    .run(handler);
+            return runners.build()
+                    .peek(runner -> runner.accept(handler))
+                    .findFirst()
+                    .isPresent();
         }
     }
 
@@ -195,29 +197,6 @@ public class Select
         public Runnable getHandler()
         {
             return handler == null ? null : handler.orElse(null);
-        }
-    }
-
-    private static enum HandlerRunner
-    {
-        NO_RUN(r -> false), RUN(HandlerRunner::doRun);
-
-        private final Predicate<Runnable> runIt;
-
-        private HandlerRunner(Predicate<Runnable> runIt)
-        {
-            this.runIt = runIt;
-        }
-
-        public boolean run(Runnable r)
-        {
-            return runIt.test(r);
-        }
-
-        private static boolean doRun(Runnable r)
-        {
-            r.run();
-            return true;
         }
     }
 }
