@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /**
@@ -30,6 +31,21 @@ public class Select
     public static interface Selecter
     {
         boolean run();
+        
+        default boolean channelClosed(Optional<?> o)
+        {
+            return o != null && o.isEmpty();
+        }
+        
+        default boolean valueRetrieved(Optional<?> o)
+        {
+            return o != null && o.isPresent();
+        }
+        
+        default Runnable handler(Optional<Runnable> o)
+        {
+            return o.get();
+        }
     }
 
     /**
@@ -84,8 +100,8 @@ public class Select
             cases.forEach(c -> c.runAsync(resultChannel, selectGroup));
             var answer = resultChannel.stream()
                     .limit(cases.size())
-                    .filter(Optional::isPresent)
-                    .map(Optional::get)
+                    .filter(this::valueRetrieved)
+                    .map(this::handler)
                     .peek(Runnable::run)
                     .findFirst()
                     .isPresent();
@@ -122,10 +138,10 @@ public class Select
             var runners = Stream.<Consumer<Runnable>> builder();
             var handler = cases.stream()
                     .map(ChannelCase::runSync)
-                    .filter(o -> o == null || o.isPresent())
+                    .filter(Predicate.not(this::channelClosed))
                     .peek(r -> runners.add(Runnable::run))
-                    .filter(Objects::nonNull)
-                    .map(Optional::get)
+                    .filter(this::valueRetrieved)
+                    .map(this::handler)
                     .findFirst()
                     .orElse(defaultHandler);
             return runners.build()
